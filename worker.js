@@ -1,17 +1,17 @@
 async function isMaintenanceMode() {
-  try {
-    const response = await fetch(
-      "https://status.afeonbooks.com/api/v2/status.json",
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (!response.ok) return false;
-
-    const data = await response.json();
-
-    return data?.status?.indicator === "maintenance";
-  } catch {
-    return false;
+  const response = await fetch("https://api.afeonbooks.com/api/maintenance/status", {
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`Maintenance status check failed with status ${response.status}`);
   }
+
+  const data = await response.json();
+  if (!data || typeof data.enabled !== "boolean") {
+    throw new Error("Maintenance status check returned an invalid response");
+  }
+  return data.enabled;
 }
 
 function pdfEscape(value) {
@@ -465,8 +465,7 @@ async function directoryResponseFor(request, env) {
   return directoryResponse(404);
 }
 
-export default {
-  async fetch(request, env) {
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -579,5 +578,19 @@ if (url.hostname === "authn.afeonbooks.com") {
       });
     }
     return new Response("Not Found", { status: 404 });
+}
+
+export default {
+  async fetch(request, env) {
+    try {
+      const response = await handleRequest(request, env);
+      if (response.status === 502 || response.status === 503) {
+        return maintenanceResponse();
+      }
+      return response;
+    } catch (error) {
+      console.error("Worker request failed; serving maintenance page", error);
+      return maintenanceResponse();
+    }
   },
 };

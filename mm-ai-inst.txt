@@ -1,0 +1,120 @@
+Here is the complete setup and code to implement Option 1. This solution includes a manual master switch (MAINTENANCE_MODE) and an automatic fallback safety net if your main logic completely crashes.
+
+Step 1: Update Your Worker Code
+
+Replace your current Worker code with this structure. It wraps your existing logic safely inside a try...catch block.
+javascript
+export default {
+  async fetch(request, env, ctx) {
+    // 1. MANUAL SWITCH: If turned on in Cloudflare dashboard, instantly show maintenance
+    if (env.MAINTENANCE_MODE === "true") {
+      return serveMaintenancePage();
+    }
+
+    try {
+      // ------------------------------------------------------------
+      // YOUR MAIN WORKER CODE GOES HERE
+      // For example, fetching from your origin server or handling routing:
+      
+      const response = await fetch(request);
+      
+      // OPTIONAL: If your origin server returns a 502/503 error, catch that too
+      if (response.status === 502 || response.status === 503) {
+        return serveMaintenancePage();
+      }
+      
+      return response;
+      // ------------------------------------------------------------
+    } catch (error) {
+      // 2. AUTOMATIC FAILOVER: If your code crashes or the fetch fails entirely
+      console.error("Main worker crashed or timed out:", error);
+      return serveMaintenancePage();
+    }
+  }
+};
+
+// 3. THE MAINTENANCE PAGE RESCUE
+function serveMaintenancePage() {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Under Maintenance</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                background-color: #f8f9fa;
+                color: #333;
+                text-align: center;
+            }
+            .container {
+                max-width: 600px;
+                padding: 20px;
+            }
+            h1 {
+                font-size: 2.5rem;
+                margin-bottom: 10px;
+                color: #222;
+            }
+            p {
+                font-size: 1.2rem;
+                color: #666;
+                margin-bottom: 30px;
+            }
+            img {
+                max-width: 100%;
+                height: auto;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>We'll be right back!</h1>
+            <p>Our website is currently undergoing scheduled maintenance. Please check back shortly.</p>
+            <!-- Replace with your actual image URL -->
+            <img src="https://unsplash.com" alt="Under Maintenance">
+        </div>
+    </body>
+    </html>
+  `;
+
+  return new Response(html, {
+    status: 503, // Crucial for SEO so Google doesn't index your maintenance page as your actual website
+    headers: {
+      'content-type': 'text/html;charset=UTF-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate', // Stops browsers from caching the maintenance page
+    }
+  });
+}
+Use code with caution.
+
+Step 2: Add the MAINTENANCE_MODE Variable
+
+To control this without redeploying code every time, you need to add an environment variable in your Cloudflare dashboard.
+1. Go to your Cloudflare Dashboard and select Workers & Pages.
+2. Click on your specific Worker.
+3. Go to the Settings tab ➡️ Variables.
+4. Scroll down to Environment Variables and click Add.
+5. Set the fields exactly like this:
+	• Variable name: MAINTENANCE_MODE
+	• Type: Text
+	• Value: false (when your site is running normally)
+6. Click Save and Deploy.
+
+💡 How to use it going forward
+
+• Normal Operations: Keep the value set to false. Your main app code will run. If your server randomly drops offline, the code will automatically catch it and show the maintenance screen.
+• Scheduled Maintenance: When you are ready to do planned work, change the value from false to true in the dashboard and click save. The change takes effect globally within seconds, instantly routing all traffic on your main domain to your maintenance screen.
+To make sure this fits your build perfectly, let me know:
+• Are you using Wrangler (CLI) to deploy your code, or do you edit directly in the Cloudflare Dashboard?
+• Do you already have a specific image URL hosted somewhere (like AWS S3 or Cloudflare R2) that you want to use?
