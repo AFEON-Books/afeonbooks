@@ -179,7 +179,7 @@ function maintenanceResponse() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="refresh" content="60">
-  <title>Service Under Maintenance | AFEON Books</title>
+  <title>Service Under Maintenance</title>
   <style>
     * { box-sizing: border-box; }
     body { min-height: 100vh; margin: 0; background: #101827; color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; }
@@ -196,8 +196,6 @@ function maintenanceResponse() {
   <div class="content">
     <main>
       <img src="/totec-maintenance.svg" alt="Maintenance in progress">
-      <h1>Service Under Maintenance</h1>
-      <p>AFEON Books is temporarily unavailable while we work on the service. This page will check again shortly.</p>
     </main>
   </div>
 </body>
