@@ -82,12 +82,12 @@ router.get("/maintenance/status", async (_req, res): Promise<void> => {
   res.set("Cache-Control", "no-store").json({ enabled: content?.maintenanceMode === "true" });
 });
 
-router.get("/maintence/on", requireUser, requireRole("admin"), requireDirectNavigation, async (_req, res): Promise<void> => {
+router.get("/maintenance/on", requireUser, requireRole("admin"), requireDirectNavigation, async (_req, res): Promise<void> => {
   await setMaintenanceMode(true);
   res.set("Cache-Control", "no-store").json({ enabled: true });
 });
 
-router.get("/maintence/off", requireUser, requireRole("admin"), requireDirectNavigation, async (_req, res): Promise<void> => {
+router.get("/maintenance/off", requireUser, requireRole("admin"), requireDirectNavigation, async (_req, res): Promise<void> => {
   await setMaintenanceMode(false);
   res.set("Cache-Control", "no-store").json({ enabled: false });
 });

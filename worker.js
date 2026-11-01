@@ -186,7 +186,7 @@ function maintenanceResponse() {
 </head>
 <body>
   <a class="status-banner" href="https://status.afeonbooks.com/" target="_blank" rel="noopener noreferrer">Service Under Maintenance — view status updates</a>
-  <img src="/totec-maintenance.svg" alt="Maintenance in progress">
+  <img src="https://msxfhfdeqxqvjuypcspm.supabase.co/storage/v1/object/public/photos/totec-maintenence.svg" alt="Maintenance in progress">
 </body>
 </html>`,
     {

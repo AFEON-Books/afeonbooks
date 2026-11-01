@@ -1,14 +1,10 @@
-import { copyFile, readdir, writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicDir = path.join(root, "artifacts", "site", "dist", "public");
 const outputFile = path.join(publicDir, "directory-manifest.json");
-const maintenanceAsset = path.join(root, "totec-maintenance.svg");
-
-await copyFile(maintenanceAsset, path.join(publicDir, "totec-maintenance.svg"));
-
 async function collectFiles(directory, relativeDirectory = "") {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];

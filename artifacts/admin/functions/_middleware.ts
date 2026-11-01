@@ -14,7 +14,7 @@ export const onRequest: PagesFunction = async (context) => {
 <body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 m-0 p-0">
   <div class="min-h-screen flex items-center justify-center">
     <div class="text-center space-y-6 max-w-md px-4">
-      <img src="/totec-maintenance.svg" alt="Maintenance" class="w-48 h-48 mx-auto" />
+      <img src="https://msxfhfdeqxqvjuypcspm.supabase.co/storage/v1/object/public/photos/totec-maintenence.svg" alt="Maintenance" class="w-48 h-48 mx-auto" />
       <div class="space-y-3">
         <h1 class="text-4xl font-bold text-white">Maintenance in Progress</h1>
         <p class="text-lg text-slate-300">We're working to improve your experience. We'll be back soon!</p>
