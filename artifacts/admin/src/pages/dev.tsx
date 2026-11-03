@@ -111,6 +111,7 @@ export default function Dev() {
   const [devTesting, setDevTesting] = useState<{ active: boolean; expiresAt: string | null } | null>(null);
   const [port, setPort] = useState("");
   const [portMessage, setPortMessage] = useState("");
+  const [portCheckLoading, setPortCheckLoading] = useState(false);
   const [renderLogs, setRenderLogs] = useState<RenderLog[]>([]);
   const [renderLogsLoading, setRenderLogsLoading] = useState(false);
   const [renderLogsError, setRenderLogsError] = useState("");
@@ -181,16 +182,44 @@ export default function Dev() {
     }
   }, [renderLogs]);
 
-  const testPort = () => {
+  const testPort = async () => {
     const value = Number(port);
     if (!Number.isInteger(value) || value < 1 || value > 65535) {
       setPortMessage("Enter a valid port from 1–65535.");
       return;
     }
-    if (SUPPORTED_SUPABASE_PORTS.includes(value)) {
-      setPortMessage(`Port ${value} is a supported Supabase PostgreSQL connection port. Supabase Free does not allow arbitrary public listeners; this checks a supported connection port rather than opening a new listener.`);
-    } else {
+    if (!SUPPORTED_SUPABASE_PORTS.includes(value)) {
       setPortMessage(`Port ${value} is not a Supabase Free PostgreSQL connection port. Use 5432 or 6543.`);
+      return;
+    }
+
+    setPortCheckLoading(true);
+    setPortMessage("");
+    try {
+      const response = await fetch("/api/dev-testing/database-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ port: value }),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        connected?: boolean;
+        configuredPort?: number | null;
+        portMatches?: boolean;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.connected) {
+        setPortMessage(payload.error ?? `Database connection test failed (${response.status}).`);
+      } else if (payload.portMatches) {
+        setPortMessage(`Connected to the API server's configured Supabase database with SELECT 1 on port ${payload.configuredPort}.`);
+      } else {
+        setPortMessage(`The database connection succeeded on the API server's configured port ${payload.configuredPort}, not ${value}. This check tests DATABASE_URL as configured; it does not switch endpoints.`);
+      }
+    } catch (error) {
+      setPortMessage(error instanceof Error ? error.message : "Unable to run the database connection test.");
+    } finally {
+      setPortCheckLoading(false);
     }
   };
 
@@ -321,11 +350,13 @@ export default function Dev() {
         <section className="bg-white border border-black/5 shadow-sm p-6 space-y-5">
           <div>
             <h2 className="text-xl font-bold">Supabase Connection Test</h2>
-            <p className="text-sm text-black/50 mt-1">Supabase Free uses supported PostgreSQL connection endpoints. It does not provide arbitrary public TCP listeners.</p>
+            <p className="text-sm text-black/50 mt-1">Runs a real SELECT 1 query against the API server's configured DATABASE_URL. This does not open a listener or switch database endpoints.</p>
           </div>
           <div className="flex flex-col md:flex-row gap-3 max-w-xl">
             <Input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" placeholder="Port (5432 or 6543)" className="rounded-none" />
-            <Button type="button" onClick={testPort} className="rounded-none bg-black text-white hover:bg-black/80">Check Port</Button>
+            <Button type="button" onClick={() => void testPort()} disabled={portCheckLoading} className="rounded-none bg-black text-white hover:bg-black/80">
+              {portCheckLoading ? "Testing…" : "Test Connection"}
+            </Button>
           </div>
           <div className="text-xs font-mono text-black/60">Supported: 5432 (PostgreSQL / pooler) · 6543 (transaction pooler)</div>
           {portMessage && <div className="bg-[#FAF7F2] border border-black/10 p-4 text-sm">{portMessage}</div>}

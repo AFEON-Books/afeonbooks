@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, orderItemsTable, productsTable } from "@workspace/db";
+import { db, ordersTable, orderItemsTable, pool, productsTable } from "@workspace/db";
 import type { OrderRow, OrderItemRow } from "@workspace/db";
 
 import type { ProductRow } from "@workspace/db";
 import { requireRole, requireUser } from "../lib/auth";
+import { logger } from "../lib/logger";
 
 type Snapshot = {
   orders: OrderRow[];
@@ -15,8 +16,45 @@ type Snapshot = {
 let activeSession: Snapshot | null = null;
 
 const DURATION_MS = 10 * 60 * 1000;
+const SUPPORTED_SUPABASE_PORTS = [5432, 6543];
 
 const router: IRouter = Router();
+
+router.post("/dev-testing/database-connection", requireUser, requireRole("admin"), async (req, res): Promise<void> => {
+  const requestedPort = req.body?.port;
+  if (!SUPPORTED_SUPABASE_PORTS.includes(requestedPort)) {
+    res.status(400).json({ connected: false, error: "Use a supported Supabase PostgreSQL port: 5432 or 6543." });
+    return;
+  }
+
+  let configuredPort: number | null = null;
+  try {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      res.status(503).json({ connected: false, error: "DATABASE_URL is not configured on the API server." });
+      return;
+    }
+
+    configuredPort = Number(new URL(databaseUrl).port || "5432");
+    await pool.query("SELECT 1");
+
+    res.json({
+      connected: true,
+      configuredPort,
+      portMatches: configuredPort === requestedPort,
+    });
+  } catch (error) {
+    const errorCode = error && typeof error === "object" && "code" in error
+      ? error.code
+      : undefined;
+    logger.error({ errorCode, configuredPort }, "Database connection check failed");
+    res.status(503).json({
+      connected: false,
+      configuredPort,
+      error: "Could not connect to the API server's configured database. Check DATABASE_URL and the Supabase connection settings.",
+    });
+  }
+});
 
 router.get("/dev-testing/status", requireUser, requireRole("admin"), (_req, res) => {
   if (!activeSession || Date.now() > activeSession.expiresAt) {
