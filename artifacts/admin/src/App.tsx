@@ -430,7 +430,7 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
 
   if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
   if (status === "signed-out") {
-    const signInUrl = new URL("/api/auth/github/start", window.location.origin);
+    const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
     signInUrl.searchParams.set("return_to", window.location.href);
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
@@ -448,7 +448,7 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
         <div>
           <h1 className="text-xl font-semibold">Staff access required</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error || "This GitHub account is not linked to an AFEON account with the staff or admin role."}</p>
-          <a className="mt-5 inline-block rounded border px-5 py-3" href={new URL(`/api/auth/github/start?return_to=${encodeURIComponent(window.location.href)}`, window.location.origin).toString()}>Try another GitHub account</a>
+          <a className="mt-5 inline-block rounded border px-5 py-3" href={new URL(`/api/auth/github/start?return_to=${encodeURIComponent(window.location.href)}`, "https://afeonbooks.com").toString()}>Try another GitHub account</a>
         </div>
       </main>
     );

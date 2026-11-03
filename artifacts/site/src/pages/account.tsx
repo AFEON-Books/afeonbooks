@@ -152,7 +152,7 @@ function AccountForm() {
       </form>
 
       {step === "email" ? (
-        <a href={`/api/auth/github/start?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`} className="block w-full border border-black/20 bg-white px-4 py-4 text-center text-xs font-bold uppercase tracking-widest hover:bg-black/[0.03]">
+        <a href={`https://afeonbooks.com/api/auth/github/start?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`} className="block w-full border border-black/20 bg-white px-4 py-4 text-center text-xs font-bold uppercase tracking-widest hover:bg-black/[0.03]">
           Staff and admin: continue with GitHub
         </a>
       ) : null}

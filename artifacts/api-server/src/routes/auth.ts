@@ -203,7 +203,7 @@ router.get("/auth/github/start", async (req, res): Promise<void> => {
 
 router.post("/auth/github/start", async (req, res): Promise<void> => {
   if (!await verifyTurnstileToken(req.body?.["cf-turnstile-response"], GITHUB_TURNSTILE_ACTION)) {
-    githubFailure(res, 403, "Complete the Turnstile security check and try again.");
+    githubFailure(res, 403, "Turnstile verification failed. The token may have expired, or its hostname/action may not match the site settings. Refresh and try again.");
     return;
   }
   const requestedReturnUrl = typeof req.body?.return_to === "string" ? req.body.return_to : undefined;

@@ -87,7 +87,7 @@ function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
   if (status === "allowed") return <>{children}</>;
   if (status === "loading" || loading) return <main className="flex min-h-screen items-center justify-center">Checking mailbox access…</main>;
   if (status === "denied") {
-    const signInUrl = new URL("/api/auth/github/start", window.location.origin);
+    const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
     signInUrl.searchParams.set("return_to", window.location.href);
     return (
       <main className="flex min-h-screen items-center justify-center px-6 text-center">
