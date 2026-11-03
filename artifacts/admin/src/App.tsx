@@ -430,14 +430,14 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
 
   if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
   if (status === "signed-out") {
-    const signInUrl = new URL("https://authn.afeonbooks.com/account");
+    const signInUrl = new URL("/api/auth/github/start", window.location.origin);
     signInUrl.searchParams.set("return_to", window.location.href);
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">Sign in to your AFEON account</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Cloudflare Access has verified your GitHub identity. Sign in with the matching staff email to continue.</p>
-          <a className="mt-5 inline-block rounded bg-primary px-5 py-3 text-primary-foreground" href={signInUrl.toString()}>Continue to account sign-in</a>
+          <h1 className="text-xl font-semibold">Sign in with GitHub</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Use your AFEON-Books organization account linked to a verified AFEON staff or admin account.</p>
+          <a className="mt-5 inline-block rounded bg-primary px-5 py-3 text-primary-foreground" href={signInUrl.toString()}>Continue with GitHub</a>
         </div>
       </main>
     );
@@ -447,7 +447,8 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
       <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
         <div>
           <h1 className="text-xl font-semibold">Staff access required</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{error || "This account is not permitted to access the admin system. Sign in with an account assigned the staff or admin role and the GitHub identity approved by Cloudflare Access."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{error || "This GitHub account is not linked to an AFEON account with the staff or admin role."}</p>
+          <a className="mt-5 inline-block rounded border px-5 py-3" href={new URL(`/api/auth/github/start?return_to=${encodeURIComponent(window.location.href)}`, window.location.origin).toString()}>Try another GitHub account</a>
         </div>
       </main>
     );

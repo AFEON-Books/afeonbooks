@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
@@ -19,14 +19,96 @@ import {
 import { sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { verifyTurnstileToken } from "../lib/turnstile";
-import { verifyCloudflareAccessAssertion } from "../lib/cloudflare-access";
 
 const AUTH_URL = (process.env.PUBLIC_AUTH_URL || "https://authn.afeonbooks.com").replace(/\/+$/, "");
 const AUTH_FROM = process.env.ZOHO_AUTH_FROM_ADDRESS || "noreply@afeonbooks.com";
 const INITIAL_ADMIN_EMAIL = normalizeEmail(process.env.INITIAL_ADMIN_EMAIL || "");
+const GITHUB_ORGANIZATION = process.env.GITHUB_OAUTH_ORGANIZATION || "AFEON-Books";
+const GITHUB_CALLBACK_URL = process.env.GITHUB_OAUTH_CALLBACK_URL || "https://api.afeonbooks.com/api/auth/github/callback";
+const GITHUB_STATE_COOKIE = "afeonbooks_github_state";
+const GITHUB_RETURN_COOKIE = "afeonbooks_github_return";
+const GITHUB_TURNSTILE_ACTION = "staff_github_login";
+const TURNSTILE_SITE_KEY = "0x4AAAAAAFY8DMwA2P5bWehZ";
+const IS_PRODUCTION = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
 const EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 let rateLimitCleanupAt = 0;
+
+function githubOAuthCredentials(): { clientId: string; clientSecret: string } {
+  const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("GitHub OAuth is not configured on the API service");
+  return { clientId, clientSecret };
+}
+
+function githubStateCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: "lax" as const,
+    domain: IS_PRODUCTION ? ".afeonbooks.com" : undefined,
+    maxAge: 10 * 60 * 1000,
+    path: "/api/auth/github",
+  };
+}
+
+function allowedAdminReturnUrl(value: string | undefined): string | undefined {
+  if (!value) return "https://afeonbooks.com/admin/";
+  if (value.length > 1900) return undefined;
+  try {
+    const target = new URL(value);
+    const allowed = (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
+      || target.origin === "https://mailsystem.afeonbooks.com"
+      || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname));
+    return allowed && !target.username && !target.password ? target.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function githubFailure(response: Response, status: number, message: string): void {
+  response.status(status).set("Cache-Control", "no-store").type("text").send(message);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function githubOAuthChallengePage(returnUrl: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Staff sign-in</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:28rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}button{margin-top:16px;padding:12px 20px;background:#111;color:#fff;border:0;font-weight:600;cursor:pointer}p{color:#555}</style></head><body><main><h1>Staff and admin sign-in</h1><p>Complete the security check to continue with GitHub.</p><form method="post" action="/api/auth/github/start"><input type="hidden" name="return_to" value="${escapeHtml(returnUrl)}"><div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}" data-action="${GITHUB_TURNSTILE_ACTION}"></div><button type="submit">Continue with GitHub</button><noscript><p>JavaScript must be enabled to complete the security check.</p></noscript></form></main><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script></body></html>`;
+}
+
+function redirectToGithub(response: Response, credentials: { clientId: string; clientSecret: string }, returnUrl: string): void {
+  const state = randomBytes(32).toString("hex");
+  response.cookie(GITHUB_STATE_COOKIE, state, githubStateCookieOptions());
+  response.cookie(GITHUB_RETURN_COOKIE, returnUrl, githubStateCookieOptions());
+  const authorizationUrl = new URL("https://github.com/login/oauth/authorize");
+  authorizationUrl.search = new URLSearchParams({
+    client_id: credentials.clientId,
+    redirect_uri: GITHUB_CALLBACK_URL,
+    scope: "read:user user:email read:org",
+    state,
+  }).toString();
+  response.set("Cache-Control", "no-store").redirect(302, authorizationUrl.toString());
+}
+
+async function githubApi<T>(url: string, accessToken: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`GitHub API request failed with HTTP ${response.status}`);
+  return await response.json() as T;
+}
 
 function authCodeHash(value: string): string {
   const pepper = process.env.AUTH_CODE_PEPPER || process.env.DATABASE_URL;
@@ -98,14 +180,176 @@ async function sendAuthEmail(to: string, subject: string, html: string): Promise
 
 const router: IRouter = Router();
 
-router.get("/access/check", async (req, res): Promise<void> => {
+router.get("/auth/github/start", async (req, res): Promise<void> => {
   try {
-    await verifyCloudflareAccessAssertion(req);
-    res.set("Cache-Control", "no-store").status(204).end();
+    githubOAuthCredentials();
   } catch (error) {
-    logger.warn({ err: error }, "Cloudflare Access check failed");
-    res.status(403).set("Cache-Control", "no-store").json({ error: "Cloudflare Access authorization is required" });
+    logger.error({ err: error }, "GitHub OAuth is not configured");
+    githubFailure(res, 503, "GitHub sign-in is not configured.");
+    return;
   }
+  const requestedReturnUrl = typeof req.query.return_to === "string" ? req.query.return_to : undefined;
+  const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
+  if (!returnUrl) {
+    res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
+    return;
+  }
+  res.set({
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; img-src data: https://challenges.cloudflare.com; style-src 'unsafe-inline'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",
+  }).type("html").send(githubOAuthChallengePage(returnUrl));
+});
+
+router.post("/auth/github/start", async (req, res): Promise<void> => {
+  if (!await verifyTurnstileToken(req.body?.["cf-turnstile-response"], GITHUB_TURNSTILE_ACTION)) {
+    githubFailure(res, 403, "Complete the Turnstile security check and try again.");
+    return;
+  }
+  const requestedReturnUrl = typeof req.body?.return_to === "string" ? req.body.return_to : undefined;
+  const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
+  if (!returnUrl) {
+    res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
+    return;
+  }
+  let credentials: ReturnType<typeof githubOAuthCredentials>;
+  try {
+    credentials = githubOAuthCredentials();
+  } catch (error) {
+    logger.error({ err: error }, "GitHub OAuth is not configured");
+    githubFailure(res, 503, "GitHub sign-in is not configured.");
+    return;
+  }
+  redirectToGithub(res, credentials, returnUrl);
+});
+
+router.get("/auth/github/callback", async (req, res): Promise<void> => {
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const storedState = req.cookies?.[GITHUB_STATE_COOKIE];
+  const stateCookieOptions = {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: "lax" as const,
+    domain: IS_PRODUCTION ? ".afeonbooks.com" : undefined,
+    path: "/api/auth/github",
+  };
+  res.clearCookie(GITHUB_STATE_COOKIE, stateCookieOptions);
+  res.clearCookie(GITHUB_RETURN_COOKIE, stateCookieOptions);
+  const submittedState = Buffer.from(state);
+  const expectedState = typeof storedState === "string" ? Buffer.from(storedState) : Buffer.alloc(0);
+  if (
+    !/^[a-f0-9]{64}$/.test(state) ||
+    expectedState.length !== submittedState.length ||
+    !timingSafeEqual(expectedState, submittedState)
+  ) {
+    githubFailure(res, 400, "GitHub sign-in could not be verified. Please start again.");
+    return;
+  }
+  if (typeof req.query.error === "string") {
+    githubFailure(res, 403, "GitHub sign-in was cancelled.");
+    return;
+  }
+  if (typeof req.query.code !== "string" || req.query.code.length > 256) {
+    githubFailure(res, 400, "GitHub did not return a valid sign-in code. Please start again.");
+    return;
+  }
+
+  const storedReturnUrl = req.cookies?.[GITHUB_RETURN_COOKIE];
+  const returnUrl = allowedAdminReturnUrl(typeof storedReturnUrl === "string" ? storedReturnUrl : undefined);
+  if (!returnUrl) {
+    githubFailure(res, 400, "The sign-in return destination could not be verified. Please start again.");
+    return;
+  }
+  let accessToken: string;
+  try {
+    const { clientId, clientSecret } = githubOAuthCredentials();
+    const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: req.query.code,
+        redirect_uri: GITHUB_CALLBACK_URL,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!tokenResponse.ok) throw new Error(`GitHub token exchange failed with HTTP ${tokenResponse.status}`);
+    const tokenResult: unknown = await tokenResponse.json();
+    if (
+      typeof tokenResult !== "object" ||
+      tokenResult === null ||
+      !("access_token" in tokenResult) ||
+      typeof tokenResult.access_token !== "string" ||
+      !tokenResult.access_token
+    ) {
+      throw new Error("GitHub token exchange returned no access token");
+    }
+    accessToken = tokenResult.access_token;
+  } catch (error) {
+    logger.error({ err: error }, "GitHub OAuth token exchange failed");
+    githubFailure(res, 502, "Unable to verify your GitHub sign-in. Please try again.");
+    return;
+  }
+
+  let githubUser: { id: number; login: string };
+  let primaryEmail: string | undefined;
+  let organizationMembership: { state: string };
+  try {
+    githubUser = await githubApi<{ id: number; login: string }>("https://api.github.com/user", accessToken);
+    if (!Number.isSafeInteger(githubUser.id) || typeof githubUser.login !== "string") {
+      throw new Error("GitHub returned an invalid user profile");
+    }
+    const emails = await githubApi<Array<{ email: string; primary: boolean; verified: boolean }>>("https://api.github.com/user/emails", accessToken);
+    primaryEmail = emails.find((item) => item.primary && item.verified && typeof item.email === "string")?.email;
+    const membershipResponse = await fetch(
+      `https://api.github.com/user/memberships/orgs/${encodeURIComponent(GITHUB_ORGANIZATION)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (membershipResponse.status === 404) {
+      githubFailure(res, 403, `Your GitHub account must be an active member of the ${GITHUB_ORGANIZATION} organization.`);
+      return;
+    }
+    if (!membershipResponse.ok) {
+      throw new Error(`GitHub organization membership check failed with HTTP ${membershipResponse.status}`);
+    }
+    organizationMembership = await membershipResponse.json() as { state: string };
+  } catch (error) {
+    logger.error({ err: error }, "GitHub OAuth identity verification failed");
+    githubFailure(res, 502, "Unable to verify your GitHub organization membership. Please try again.");
+    return;
+  }
+
+  if (organizationMembership.state !== "active") {
+    githubFailure(res, 403, `Your GitHub account must be an active member of the ${GITHUB_ORGANIZATION} organization.`);
+    return;
+  }
+  if (!primaryEmail) {
+    githubFailure(res, 403, "Your GitHub account must have a verified primary email address.");
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable)
+    .where(eq(usersTable.email, normalizeEmail(primaryEmail)))
+    .limit(1);
+  if (!user || !user.emailVerifiedAt || (user.role !== "staff" && user.role !== "admin")) {
+    githubFailure(res, 403, "This GitHub account is not linked to a verified AFEON staff or admin account.");
+    return;
+  }
+
+  await destroySession(req, res);
+  await createSession(user.id, req, res, String(githubUser.id));
+  res.set("Cache-Control", "no-store").redirect(303, returnUrl);
 });
 
 router.post("/auth/email-lookup", async (req, res): Promise<void> => {

@@ -3,8 +3,6 @@ import { promisify } from "node:util";
 import type { NextFunction, Request, Response } from "express";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { authTokensTable, db, sessionsTable, usersTable, zohoMailConnectionsTable, type UserRow } from "@workspace/db";
-import { logger } from "./logger";
-import { verifyCloudflareAccessAssertion } from "./cloudflare-access";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "afeonbooks_session";
@@ -85,12 +83,13 @@ export function publicUser(user: UserRow) {
   return { id: user.id, email: user.email, name: user.name, role: user.role ?? "customer", createdAt: user.createdAt.toISOString() };
 }
 
-export async function createSession(userId: number, request: Request, response: Response): Promise<void> {
+export async function createSession(userId: number, request: Request, response: Response, githubUserId?: string): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(sessionsTable).values({
     tokenHash: hashSessionToken(token),
     userId,
     expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    githubUserId: githubUserId ?? null,
   });
   const domain = sessionCookieDomain(request);
   const secure = IS_PRODUCTION || domain !== undefined;
@@ -159,29 +158,24 @@ async function authorizeStaffIdentity(request: Request, response: Response, role
   }
   if (!IS_PRODUCTION) return true;
 
-  try {
-    const claims = await verifyCloudflareAccessAssertion(request);
-    if (typeof claims?.email !== "string" || normalizeEmail(claims.email) !== normalizeEmail(request.user.email) || !request.user.emailVerifiedAt) {
-      response.status(403).json({ error: "Cloudflare Access identity does not match the signed-in staff account" });
-      return false;
-    }
-    const assertion = request.get("cf-access-jwt-assertion") ?? request.cookies?.afeonbooks_access;
-    if (assertion) {
-      response.cookie("afeonbooks_access", assertion, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        domain: SESSION_COOKIE_DOMAIN,
-        maxAge: 15 * 60 * 1000,
-        path: "/",
-      });
-    }
-    return true;
-  } catch (error) {
-    logger.warn({ err: error, userId: request.user.id }, "Cloudflare Access authorization failed");
-    response.status(403).json({ error: "Cloudflare Access authorization is required" });
+  const token = request.cookies?.[SESSION_COOKIE];
+  if (!token) {
+    response.status(403).json({ error: "Sign in with GitHub to access staff tools" });
     return false;
   }
+  const [session] = await db.select({ githubUserId: sessionsTable.githubUserId })
+    .from(sessionsTable)
+    .where(and(
+      eq(sessionsTable.tokenHash, hashSessionToken(token)),
+      eq(sessionsTable.userId, request.user.id),
+      gt(sessionsTable.expiresAt, new Date()),
+    ))
+    .limit(1);
+  if (!session?.githubUserId || !request.user.emailVerifiedAt) {
+    response.status(403).json({ error: "A verified GitHub staff sign-in is required" });
+    return false;
+  }
+  return true;
 }
 
 export function requireStaffAccess(...roles: string[]) {

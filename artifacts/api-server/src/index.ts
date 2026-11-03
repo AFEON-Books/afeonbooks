@@ -124,8 +124,10 @@ async function ensureAuthTables() {
       id serial PRIMARY KEY,
       token_hash text NOT NULL UNIQUE,
       user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at timestamptz NOT NULL
+      expires_at timestamptz NOT NULL,
+      github_user_id text
     );
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS github_user_id text;
     CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
     CREATE TABLE IF NOT EXISTS auth_tokens (
       id serial PRIMARY KEY,

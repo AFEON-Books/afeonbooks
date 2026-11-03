@@ -14,28 +14,6 @@ async function isMaintenanceMode() {
   return data.enabled;
 }
 
-async function validateAccessAssertion(assertion) {
-  if (!assertion || assertion.length > 3500) return false;
-  const response = await fetch("https://api.afeonbooks.com/api/access/check", {
-    headers: { Accept: "application/json", "cf-access-jwt-assertion": assertion },
-    signal: AbortSignal.timeout(5000),
-  });
-  if (response.status === 403) return false;
-  if (!response.ok) throw new Error(`Cloudflare Access validation failed with HTTP ${response.status}`);
-  return true;
-}
-
-function protectedAccessResponse(response, assertion) {
-  const headers = new Headers(response.headers);
-  headers.append("Set-Cookie", `afeonbooks_access=${encodeURIComponent(assertion)}; Domain=.afeonbooks.com; Path=/; Max-Age=900; Secure; HttpOnly; SameSite=Lax`);
-  headers.set("Cache-Control", "private, no-store");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
 function pdfEscape(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
@@ -248,15 +226,8 @@ function directoryKeyMatches(url, env) {
 async function getAdminUserFromSession(request) {
   const cookie = request.headers.get("Cookie");
   if (!cookie) return null;
-  const assertion = request.headers.get("Cf-Access-Jwt-Assertion");
-
-  const headers = {
-    Accept: "application/json",
-    Cookie: cookie,
-  };
-  if (assertion) headers["Cf-Access-Jwt-Assertion"] = assertion;
   const response = await fetch("https://api.afeonbooks.com/api/auth/admin/access", {
-    headers,
+    headers: { Accept: "application/json", Cookie: cookie },
     redirect: "manual",
   });
 
@@ -274,7 +245,7 @@ async function getAdminUserFromSession(request) {
 
 function sourceAuthError(status, message) {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify admin access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account">Open your AFEON account</a></p></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://api.afeonbooks.com/api/auth/github/start?return_to=https%3A%2F%2Fsource.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
     {
       status,
       headers: {
@@ -520,14 +491,6 @@ if (url.hostname === "source.afeonbooks.com") {
     return env.ASSETS.fetch(request);
   }
 
-  const accessAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!await validateAccessAssertion(accessAssertion)) {
-    return new Response("Cloudflare Access authorization is required.", {
-      status: 403,
-      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-    });
-  }
-
   let user;
   try {
     user = await getAdminUserFromSession(request);
@@ -536,31 +499,25 @@ if (url.hostname === "source.afeonbooks.com") {
       message: "Source dashboard admin session check failed",
       error: error instanceof Error ? error.message : String(error),
     }));
-    return protectedAccessResponse(sourceAuthError(503, "The session check failed. Please try again shortly."), accessAssertion);
+    return sourceAuthError(503, "The session check failed. Please try again shortly.");
   }
 
   if (!user) {
-    if (url.searchParams.get("authn_return") === "1") {
-      return protectedAccessResponse(sourceAuthError(401, "The sign-in returned without a staff session. Sign in with a staff or admin account, then try the dashboard again."), accessAssertion);
-    }
-
-    const authUrl = new URL("https://authn.afeonbooks.com/");
-    const returnTo = new URL(request.url);
-    returnTo.searchParams.set("authn_return", "1");
-    authUrl.searchParams.set("return_to", returnTo.toString());
-    return protectedAccessResponse(Response.redirect(authUrl.toString(), 302), accessAssertion);
+    const authUrl = new URL("https://api.afeonbooks.com/api/auth/github/start");
+    authUrl.searchParams.set("return_to", request.url);
+    return Response.redirect(authUrl.toString(), 302);
   }
 
   if (user.user?.role !== "staff" && user.user?.role !== "admin") {
-    return protectedAccessResponse(sourceAuthError(403, "A staff or admin account is required to access this dashboard."), accessAssertion);
+    return sourceAuthError(403, "A staff or admin account is required to access this dashboard.");
   }
 
-  return protectedAccessResponse(new Response(sourceDashboardHtml(), {
+  return new Response(sourceDashboardHtml(), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     },
-  }), accessAssertion);
+  });
 }
 
 if (url.hostname === "authn.afeonbooks.com") {
@@ -581,18 +538,31 @@ if (url.hostname === "authn.afeonbooks.com") {
       return fetch(new Request(apiUrl, request));
     }
 
-    const isAdminRoute =
-      path === "/admin" ||
-      path.startsWith("/admin/");
+    const isAdminRoute = path === "/admin" || path.startsWith("/admin/");
     const isMailSystem = url.hostname === "mailsystem.afeonbooks.com";
-    let accessAssertion;
-    if (isAdminRoute || isMailSystem) {
-      accessAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
-      if (!await validateAccessAssertion(accessAssertion)) {
-        return new Response("Cloudflare Access authorization is required.", {
-          status: 403,
+
+    if (
+      (isAdminRoute || isMailSystem) &&
+      request.method === "GET" &&
+      request.headers.get("Accept")?.includes("text/html")
+    ) {
+      let staffSession;
+      try {
+        staffSession = await getAdminUserFromSession(request);
+      } catch (error) {
+        console.error(JSON.stringify({
+          message: "Admin page session check failed",
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        return new Response("Unable to verify staff access. Please try again shortly.", {
+          status: 503,
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
         });
+      }
+      if (!staffSession?.user) {
+        const authUrl = new URL("https://api.afeonbooks.com/api/auth/github/start");
+        authUrl.searchParams.set("return_to", request.url);
+        return Response.redirect(authUrl.toString(), 302);
       }
     }
 
@@ -621,11 +591,11 @@ if (url.hostname === "authn.afeonbooks.com") {
     const fetchAdminIndex = () => env.ASSETS.fetch(new Request(new URL("/admin/", request.url), request));
     const fetchAdminPos = () => env.ASSETS.fetch(new Request(new URL("/admin/pos", request.url), request));
 
-    if (path === "/admin/admin" || path === "/admin/admin/") return protectedAccessResponse(Response.redirect(new URL("/admin/", request.url), 301), accessAssertion);
-    if (path.startsWith("/admin/admin/")) return protectedAccessResponse(Response.redirect(new URL(path.replace(/^\/admin\/admin/, "/admin"), request.url), 301), accessAssertion);
-    if (path === "/admin/pos" || path === "/admin/pos/") return protectedAccessResponse(await fetchAdminPos(), accessAssertion);
-    if (path === "/admin/zoho-mail" || path === "/admin/zoho-mail/") return protectedAccessResponse(await fetchAdminIndex(), accessAssertion);
-    if (path === "/admin" || path === "/admin/" || (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."))) return protectedAccessResponse(await fetchAdminIndex(), accessAssertion);
+    if (path === "/admin/admin" || path === "/admin/admin/") return Response.redirect(new URL("/admin/", request.url), 301);
+    if (path.startsWith("/admin/admin/")) return Response.redirect(new URL(path.replace(/^\/admin\/admin/, "/admin"), request.url), 301);
+    if (path === "/admin/pos" || path === "/admin/pos/") return fetchAdminPos();
+    if (path === "/admin/zoho-mail" || path === "/admin/zoho-mail/") return fetchAdminIndex();
+    if (path === "/admin" || path === "/admin/" || (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."))) return fetchAdminIndex();
 
     const fetchPickupIndex = () => env.ASSETS.fetch(new Request(new URL("/pickup/", request.url), request));
     if (path === "/pickup" || path === "/pickup/" || (path.startsWith("/pickup/") && !path.split("/").pop()?.includes("."))) return fetchPickupIndex();
@@ -639,7 +609,6 @@ if (url.hostname === "authn.afeonbooks.com") {
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
-    if ((isAdminRoute || isMailSystem) && assetResponse.status !== 404) return protectedAccessResponse(assetResponse, accessAssertion);
     if (assetResponse.status !== 404) return assetResponse;
     if (!path.split("/").pop()?.includes(".")) {
       const notFoundPage = await fetchSiteIndex();

@@ -95,7 +95,7 @@ export default function ZohoMail() {
 
         <section className="bg-white border border-black/5 shadow-sm p-8">
           <h2 className="text-xl font-bold border-b border-black/10 pb-4">Server-side connection check</h2>
-          <p className="text-sm text-black/50 mt-3">This refreshes the Zoho OAuth access token without sending an email. Access requires an AFEON staff or admin account and Cloudflare Access approval.</p>
+          <p className="text-sm text-black/50 mt-3">This refreshes the Zoho OAuth access token without sending an email. Access requires GitHub sign-in with an AFEON-Books member account assigned the AFEON staff or admin role.</p>
           <div className="flex flex-col md:flex-row gap-3 mt-5 max-w-xl">
             <button type="button" onClick={checkZoho} disabled={checking} className="h-11 px-5 bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-40">
               {checking ? "Checking…" : "Check Zoho"}

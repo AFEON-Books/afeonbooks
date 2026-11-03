@@ -15,6 +15,7 @@ export const sessionsTable = pgTable("sessions", {
   tokenHash: text("token_hash").notNull().unique(),
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  githubUserId: text("github_user_id"),
 });
 
 export const loyaltyTransactionsTable = pgTable("loyalty_transactions", {

@@ -87,14 +87,14 @@ function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
   if (status === "allowed") return <>{children}</>;
   if (status === "loading" || loading) return <main className="flex min-h-screen items-center justify-center">Checking mailbox access…</main>;
   if (status === "denied") {
-    const signInUrl = new URL("https://authn.afeonbooks.com/account");
+    const signInUrl = new URL("/api/auth/github/start", window.location.origin);
     signInUrl.searchParams.set("return_to", window.location.href);
     return (
       <main className="flex min-h-screen items-center justify-center px-6 text-center">
         <div className="max-w-md">
-          <h1 className="text-xl font-semibold">Admin mailbox access required</h1>
-          <p className="mt-2 text-sm text-black/60">{error || "Sign in with a verified AFEON staff or admin account that matches your approved GitHub identity."}</p>
-          {!user && <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>Sign in to AFEON</a>}
+          <h1 className="text-xl font-semibold">Staff mailbox access required</h1>
+          <p className="mt-2 text-sm text-black/60">{error || "Sign in with a GitHub account that belongs to AFEON-Books and is linked to a verified AFEON staff or admin account."}</p>
+          <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>Continue with GitHub</a>
         </div>
       </main>
     );
