@@ -36,11 +36,10 @@ function getAllowedReturnUrl(value: string | null): string | null {
 
   try {
     const target = new URL(value);
-    if (
-      !["https://source.afeonbooks.com", "https://mailsystem.afeonbooks.com"].includes(target.origin) ||
-      target.username ||
-      target.password
-    ) {
+    const allowed = target.origin === "https://mailsystem.afeonbooks.com"
+      || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/infra"].includes(target.pathname))
+      || (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")));
+    if (!allowed || target.username || target.password) {
       return null;
     }
     return target.toString();
@@ -51,17 +50,17 @@ function getAllowedReturnUrl(value: string | null): string | null {
 
 function AccountForm() {
   const { signIn, signUp } = useAuth();
-  const [registering, setRegistering] = useState(false);
+  const [step, setStep] = useState<"email" | "code" | "password" | "signup" | "forgot" | "verification">("email");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [forgot, setForgot] = useState(false);
-  const [forgotMessage, setForgotMessage] = useState("");
+  const [message, setMessage] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
-  const action = forgot ? "password_reset" : registering ? "signup" : "login";
+  const action = step === "forgot" ? "password_reset" : step === "signup" ? "signup" : step === "verification" ? "resend_verification" : "login";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -72,13 +71,36 @@ function AccountForm() {
     }
     setBusy(true);
     try {
-      if (forgot) {
-        const data = await authApiRequest<{ message: string }>("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email, "cf-turnstile-response": turnstileToken }) });
-        setForgotMessage(data.message);
-      } else if (registering) {
+      if (step === "email") {
+        const data = await authApiRequest<{ accountFound: boolean; codeSent?: boolean; requiresVerification?: boolean }>("/api/auth/email-lookup", {
+          method: "POST",
+          body: JSON.stringify({ email, "cf-turnstile-response": turnstileToken }),
+        });
+        setMessage("");
+        if (!data.accountFound) setStep("signup");
+        else if (data.requiresVerification) setStep("verification");
+        else if (data.codeSent) setStep("code");
+      } else if (step === "code") {
+        await authApiRequest<{ user: User }>("/api/auth/email-code/verify", {
+          method: "POST",
+          body: JSON.stringify({ email, code, "cf-turnstile-response": turnstileToken }),
+        });
+        window.location.reload();
+      } else if (step === "password") {
+        await signIn(email, password, turnstileToken);
+      } else if (step === "signup") {
         await signUp(name, email, password, turnstileToken);
-        setForgotMessage("Check your email to verify your account before signing in.");
-      } else await signIn(email, password, turnstileToken);
+        setMessage("Check your email to verify your account before signing in.");
+      } else if (step === "forgot") {
+        const data = await authApiRequest<{ message: string }>("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email, "cf-turnstile-response": turnstileToken }) });
+        setMessage(data.message);
+      } else if (step === "verification") {
+        const data = await authApiRequest<{ message: string }>("/api/auth/resend-verification", {
+          method: "POST",
+          body: JSON.stringify({ email, "cf-turnstile-response": turnstileToken }),
+        });
+        setMessage(data.message);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to continue");
     } finally {
@@ -88,22 +110,56 @@ function AccountForm() {
     }
   };
 
+  const backToEmail = () => {
+    setStep("email");
+    setPassword("");
+    setCode("");
+    setError("");
+    setMessage("");
+  };
+
+  const title = step === "email" ? "Continue with email"
+    : step === "code" ? "Enter your email code"
+      : step === "password" ? "Sign in with password"
+        : step === "signup" ? "Create your account"
+          : step === "forgot" ? "Reset your password"
+            : "Verify your email";
+
   return (
-    <form onSubmit={submit} className="mx-auto w-full max-w-md space-y-5">
-      {!forgot && registering && <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black" />}
-      <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" required className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black" />
-      {!forgot && <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" minLength={8} required className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black" />}
-      <TurnstileWidget action={action} onToken={setTurnstileToken} resetKey={turnstileResetKey} />
-      {error && <p className="text-sm text-red-700">{error}</p>}
-      {forgotMessage && <p className="text-sm text-emerald-700">{forgotMessage}</p>}
-      <Button type="submit" disabled={busy} className="w-full rounded-none bg-black py-6 text-xs font-bold uppercase tracking-widest text-white hover:bg-black/80">
-        {busy ? "Please wait..." : forgot ? "Send reset link" : registering ? "Create account" : "Sign in"}
-      </Button>
-      {!registering && <button type="button" onClick={() => { setForgot(!forgot); setError(""); setForgotMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">{forgot ? "Back to sign in" : "Forgot password?"}</button>}
-      {!forgot && <button type="button" onClick={() => { setRegistering(!registering); setError(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">
-        {registering ? "Already have an account? Sign in" : "New here? Create an account"}
-      </button>}
-    </form>
+    <div className="mx-auto w-full max-w-md space-y-5">
+      <form onSubmit={submit} className="space-y-5">
+        <h2 className="text-xl font-bold">{title}</h2>
+        {step === "signup" && <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" required className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black" />}
+        {step === "email" || step === "signup" || step === "verification" ? (
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" required readOnly={step !== "email"} className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black read-only:bg-black/[0.03]" />
+        ) : null}
+        {(step === "password" || step === "signup") && (
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" minLength={8} required className="w-full border border-black/15 bg-white px-4 py-3 outline-none focus:border-black" />
+        )}
+        {step === "code" && (
+          <>
+            <p className="text-sm text-black/60">We sent a five-digit sign-in code to {email}. It expires in 10 minutes.</p>
+            <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="5-digit code" required className="w-full border border-black/15 bg-white px-4 py-3 font-mono tracking-[0.3em] outline-none focus:border-black" />
+          </>
+        )}
+        {step === "verification" && <p className="text-sm text-black/60">This account has not verified its email yet. Resend the verification link to continue.</p>}
+        <TurnstileWidget action={action} onToken={setTurnstileToken} resetKey={turnstileResetKey} />
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        {message && <p className="text-sm text-emerald-700">{message}</p>}
+        <Button type="submit" disabled={busy} className="w-full rounded-none bg-black py-6 text-xs font-bold uppercase tracking-widest text-white hover:bg-black/80">
+          {busy ? "Please wait..." : step === "email" ? "Continue with email" : step === "code" ? "Sign in with code" : step === "password" ? "Sign in" : step === "signup" ? "Create account" : step === "forgot" ? "Send reset link" : "Resend verification email"}
+        </Button>
+      </form>
+
+      {step === "email" ? (
+        <a href="https://afeonbooks.com/admin/" className="block w-full border border-black/20 bg-white px-4 py-4 text-center text-xs font-bold uppercase tracking-widest hover:bg-black/[0.03]">
+          Staff and admin: continue with GitHub
+        </a>
+      ) : null}
+      {step === "code" && <button type="button" onClick={() => { setStep("password"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Login with Password</button>}
+      {step === "password" && <button type="button" onClick={() => { setStep("forgot"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Forgot password?</button>}
+      {step !== "email" && <button type="button" onClick={backToEmail} className="w-full text-sm text-black/55 underline underline-offset-4">Use a different email</button>}
+    </div>
   );
 }
 
@@ -273,11 +329,16 @@ export default function Account() {
     }
   }, [isAuthEntry, isAuthHost, loading, user, hasTokenFlow]);
 
+  const returnRequiresAdmin = returnTo
+    ? new URL(returnTo).hostname === "mailsystem.afeonbooks.com" || new URL(returnTo).hostname === "source.afeonbooks.com"
+    : false;
+  const canReturn = user?.role === "admin" || (!returnRequiresAdmin && user?.role === "staff");
+
   useEffect(() => {
-    if (isAuthHost && returnTo && !loading && user?.role === "admin") {
+    if (isAuthHost && returnTo && !loading && canReturn) {
       window.location.replace(returnTo);
     }
-  }, [isAuthHost, loading, returnTo, user]);
+  }, [canReturn, isAuthHost, loading, returnTo]);
 
   if (!loading && !user && !hasTokenFlow && !isAuthEntry) {
     return null;
@@ -304,7 +365,7 @@ export default function Account() {
           <p className="text-black/50">Loading...</p>
         ) : isAuthHost && returnToParam && !returnTo ? (
           <p className="mx-auto mt-8 max-w-md text-sm text-red-700">This sign-in destination is not allowed.</p>
-        ) : isAuthHost && returnTo && user && user.role !== "admin" ? (
+        ) : isAuthHost && returnTo && user && !canReturn ? (
           <div className="mx-auto mt-8 max-w-md text-center text-sm">
             <p className="text-red-700">This page requires an administrator account.</p>
             <Link href="/account" className="mt-3 inline-block underline underline-offset-4">

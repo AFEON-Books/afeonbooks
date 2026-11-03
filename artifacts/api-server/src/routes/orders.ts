@@ -8,6 +8,7 @@ import {
   usersTable,
   loyaltyTransactionsTable,
   promoCodesTable,
+  orderAccessTokensTable,
   type OrderRow,
   type OrderItemRow,
 } from "@workspace/db";
@@ -22,12 +23,21 @@ import {
   UpdateOrderStatusResponse,
   DeleteOrderParams,
 } from "@workspace/api-zod";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { sendOrderConfirmation, sendOrderStatusUpdateEmail } from "../lib/email";
-import { normalizeEmail, requireRole, requireUser } from "../lib/auth";
+import { loadUser, normalizeEmail, requireRole, requireUser } from "../lib/auth";
+import { createOrderAccessToken, hasOrderAccess, newOrderAccessToken } from "../lib/order-access";
 
 const router: IRouter = Router();
 const CUSTOM_ADDRESS_SHIPPING_FEE_CENTS = 500;
+const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || "https://afeonbooks.com").replace(/\/+$/, "");
+
+class StockChangedError extends Error {}
+
+router.use("/orders", (_request, response, next) => {
+  response.setHeader("Cache-Control", "private, no-store");
+  next();
+});
 
 function serializeOrder(o: OrderRow, items: OrderItemRow[]) {
   return {
@@ -168,13 +178,14 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  if (req.user) {
-    const isStaffOrAdmin = req.user.role === "staff" || req.user.role === "admin";
-    const isOwner = found[0].customerEmail.toLowerCase() === req.user.email.toLowerCase();
-    if (!isStaffOrAdmin && !isOwner) {
-      res.status(403).json({ error: "Not allowed" });
-      return;
-    }
+  const user = await loadUser(req);
+  const isStaffOrAdmin = user?.role === "staff" || user?.role === "admin";
+  const isOwner = user?.email.toLowerCase() === found[0].customerEmail.toLowerCase();
+  const accessToken = req.get("X-Order-Access-Token");
+  const hasTokenAccess = accessToken ? await hasOrderAccess(id, accessToken) : false;
+  if (!isStaffOrAdmin && !isOwner && !hasTokenAccess) {
+    res.status(404).json({ error: "not found" });
+    return;
   }
 
   const items = await db
@@ -285,29 +296,43 @@ router.post("/orders", async (req, res): Promise<void> => {
     country = co;
   }
 
-  const productIds = body.items.map((i) => i.productId);
+  const requestedQuantities = new Map<number, number>();
+  for (const item of body.items) {
+    const quantity = (requestedQuantities.get(item.productId) ?? 0) + item.quantity;
+    if (!Number.isSafeInteger(quantity) || quantity > 2_147_483_647) {
+      res.status(400).json({ error: "Requested product quantity is too large" });
+      return;
+    }
+    requestedQuantities.set(item.productId, quantity);
+  }
+  const productIds = [...requestedQuantities.keys()];
   const products = await db
     .select()
     .from(productsTable)
     .where(inArray(productsTable.id, productIds));
   const byId = new Map(products.map((p) => [p.id, p]));
 
+  for (const [productId, quantity] of requestedQuantities) {
+    const product = byId.get(productId);
+    if (!product) {
+      res.status(400).json({ error: `Unknown product ${productId}` });
+      return;
+    }
+    if (!product.active) {
+      res.status(400).json({ error: `Product ${product.name} is not available` });
+      return;
+    }
+    if (product.stock < quantity) {
+      res.status(400).json({ error: `Not enough stock for ${product.name}` });
+      return;
+    }
+  }
+
   let subtotal = 0;
   const lineItems: { productId: number; productName: string; quantity: number; unitPriceCents: number }[] = [];
   for (const it of body.items) {
     const p = byId.get(it.productId);
-    if (!p) {
-      res.status(400).json({ error: `Unknown product ${it.productId}` });
-      return;
-    }
-    if (!p.active) {
-      res.status(400).json({ error: `Product ${p.name} is not available` });
-      return;
-    }
-    if (p.stock < it.quantity) {
-      res.status(400).json({ error: `Not enough stock for ${p.name}` });
-      return;
-    }
+    if (!p) continue;
     subtotal += p.priceCents * it.quantity;
     lineItems.push({
       productId: p.id,
@@ -318,75 +343,94 @@ router.post("/orders", async (req, res): Promise<void> => {
   }
   const currency = products[0]?.currency ?? "USD";
   const promoCode = body.promoCode?.trim().toUpperCase();
+  const accessToken = newOrderAccessToken();
 
-  const created = await db.transaction(async (tx) => {
-    let discountCents = 0;
-    if (promoCode) {
-      const [promo] = await tx
-        .select()
-        .from(promoCodesTable)
-        .where(eq(promoCodesTable.code, promoCode))
-        .for("update")
-        .limit(1);
-      const now = new Date();
-      if (
-        !promo ||
-        !promo.active ||
-        (promo.expiresAt !== null && promo.expiresAt <= now) ||
-        (promo.maxUses !== null && promo.useCount >= promo.maxUses)
-      ) return null;
-      discountCents = promo.discountType === "percent"
-        ? Math.floor(subtotal * promo.discountValue / 100)
-        : Math.min(subtotal, promo.discountValue);
-      await tx.update(promoCodesTable).set({ useCount: promo.useCount + 1 }).where(eq(promoCodesTable.id, promo.id));
-    }
-    const total = Math.max(0, subtotal - discountCents) + shipping;
-    const inserted = await tx
-      .insert(ordersTable)
-      .values({
-        school,
-        customerName: body.customerName,
-        customerEmail: body.customerEmail,
-        customerPhone: body.customerPhone,
-        shippingAddress,
-        city,
-        postalCode,
-        country,
-        classroom,
-        useDefaultAddress: body.useDefaultAddress ? "true" : "false",
-        notes: body.notes ?? null,
-        customFields: JSON.stringify(body.customFields ?? {}),
-        paymentMethod: "cash_on_delivery",
-        orderType: body.orderType === "preorder" ? "preorder" : "sale",
-        paymentStatus: body.orderType === "preorder" ? "due_later" : "due",
-        status: "pending",
-        subtotalCents: subtotal,
-        discountCents,
-        shippingCents: shipping,
-        totalCents: total,
-        currency,
-        utmSource: body.utmSource ?? null,
-        utmMedium: body.utmMedium ?? null,
-        utmCampaign: body.utmCampaign ?? null,
-        utmTerm: body.utmTerm ?? null,
-        utmContent: body.utmContent ?? null,
-        referrer: body.referrer ?? null,
-        landingPage: body.landingPage ?? null,
-      })
-      .returning();
-    const order = inserted[0]!;
-    const items = await tx
-      .insert(orderItemsTable)
-      .values(lineItems.map((li) => ({ ...li, orderId: order.id })))
-      .returning();
-    for (const it of body.items) {
-      await tx
-        .update(productsTable)
-        .set({ stock: sql`${productsTable.stock} - ${it.quantity}` })
-        .where(eq(productsTable.id, it.productId));
-    }
-    return { order, items };
-  });
+  let created: { order: OrderRow; items: OrderItemRow[]; accessToken: string } | null;
+  try {
+    created = await db.transaction(async (tx) => {
+      let discountCents = 0;
+      if (promoCode) {
+        const [promo] = await tx
+          .select()
+          .from(promoCodesTable)
+          .where(eq(promoCodesTable.code, promoCode))
+          .for("update")
+          .limit(1);
+        const now = new Date();
+        if (
+          !promo ||
+          !promo.active ||
+          (promo.expiresAt !== null && promo.expiresAt <= now) ||
+          (promo.maxUses !== null && promo.useCount >= promo.maxUses)
+        ) return null;
+        discountCents = promo.discountType === "percent"
+          ? Math.floor(subtotal * promo.discountValue / 100)
+          : Math.min(subtotal, promo.discountValue);
+        await tx.update(promoCodesTable).set({ useCount: promo.useCount + 1 }).where(eq(promoCodesTable.id, promo.id));
+      }
+      for (const [productId, quantity] of [...requestedQuantities].sort(([a], [b]) => a - b)) {
+        const [updatedProduct] = await tx
+          .update(productsTable)
+          .set({ stock: sql`${productsTable.stock} - ${quantity}` })
+          .where(and(
+            eq(productsTable.id, productId),
+            eq(productsTable.active, true),
+            gte(productsTable.stock, quantity),
+          ))
+          .returning({ id: productsTable.id });
+        if (!updatedProduct) throw new StockChangedError();
+      }
+      const total = Math.max(0, subtotal - discountCents) + shipping;
+      const inserted = await tx
+        .insert(ordersTable)
+        .values({
+          school,
+          customerName: body.customerName,
+          customerEmail: body.customerEmail,
+          customerPhone: body.customerPhone,
+          shippingAddress,
+          city,
+          postalCode,
+          country,
+          classroom,
+          useDefaultAddress: body.useDefaultAddress ? "true" : "false",
+          notes: body.notes ?? null,
+          customFields: JSON.stringify(body.customFields ?? {}),
+          paymentMethod: "cash_on_delivery",
+          orderType: body.orderType === "preorder" ? "preorder" : "sale",
+          paymentStatus: body.orderType === "preorder" ? "due_later" : "due",
+          status: "pending",
+          subtotalCents: subtotal,
+          discountCents,
+          shippingCents: shipping,
+          totalCents: total,
+          currency,
+          utmSource: body.utmSource ?? null,
+          utmMedium: body.utmMedium ?? null,
+          utmCampaign: body.utmCampaign ?? null,
+          utmTerm: body.utmTerm ?? null,
+          utmContent: body.utmContent ?? null,
+          referrer: body.referrer ?? null,
+          landingPage: body.landingPage ?? null,
+        })
+        .returning();
+      const order = inserted[0]!;
+      const items = await tx
+        .insert(orderItemsTable)
+        .values(lineItems.map((li) => ({ ...li, orderId: order.id })))
+        .returning();
+      await tx.insert(orderAccessTokensTable).values({
+        orderId: order.id,
+        tokenHash: accessToken.tokenHash,
+        expiresAt: accessToken.expiresAt,
+      });
+      return { order, items, accessToken: accessToken.token };
+    });
+  } catch (error) {
+    if (!(error instanceof StockChangedError)) throw error;
+    res.status(409).json({ error: "Stock changed while placing your order. Please refresh and try again." });
+    return;
+  }
 
   if (!created) {
     res.status(400).json({ error: "This promo code is invalid or no longer available." });
@@ -402,7 +446,7 @@ router.post("/orders", async (req, res): Promise<void> => {
       .limit(1)
   )[0];
   if (content) {
-    const orderUrl = `https://click.afeonbooks.com/orders/${created.order.id}`;
+    const orderUrl = `${PUBLIC_SITE_URL}/order/${created.order.id}#access_token=${encodeURIComponent(created.accessToken)}`;
     void sendOrderConfirmation({
       content,
       order: created.order,
@@ -411,7 +455,33 @@ router.post("/orders", async (req, res): Promise<void> => {
     });
   }
 
-  res.status(201).json(GetOrderResponse.parse(serializeOrder(created.order, created.items)));
+  const orderResponse = GetOrderResponse.parse(serializeOrder(created.order, created.items));
+  res.status(201).json({ ...orderResponse, accessToken: created.accessToken });
+});
+
+router.delete("/orders/:id/access-tokens", requireUser, requireRole("admin"), async (req, res): Promise<void> => {
+  const { id } = GetOrderParams.parse(req.params);
+  const revoked = await db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ id: ordersTable.id })
+      .from(ordersTable)
+      .where(eq(ordersTable.id, id))
+      .for("update");
+    if (!order) return false;
+
+    const revokedAt = new Date();
+    await tx.update(ordersTable).set({ guestAccessRevokedAt: revokedAt }).where(eq(ordersTable.id, id));
+    await tx
+      .update(orderAccessTokensTable)
+      .set({ revokedAt })
+      .where(and(eq(orderAccessTokensTable.orderId, id), isNull(orderAccessTokensTable.revokedAt)));
+    return true;
+  });
+  if (!revoked) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  res.status(204).send();
 });
 
 router.patch("/orders/:id", requireUser, requireRole("staff", "admin"), async (req, res): Promise<void> => {
@@ -474,7 +544,10 @@ router.patch("/orders/:id", requireUser, requireRole("staff", "admin"), async (r
     .select()
     .from(orderItemsTable)
     .where(eq(orderItemsTable.orderId, id));
-  if (previousStatus !== body.status || estimatedDeliveryDate) void sendOrderStatusUpdateEmail(updated[0], body.status, estimatedDeliveryDate);
+  if (previousStatus !== body.status || estimatedDeliveryDate) {
+    const accessToken = await createOrderAccessToken(id);
+    void sendOrderStatusUpdateEmail(updated[0], body.status, estimatedDeliveryDate, accessToken);
+  }
   res.json(UpdateOrderStatusResponse.parse(serializeOrder(updated[0], items)));
 });
 

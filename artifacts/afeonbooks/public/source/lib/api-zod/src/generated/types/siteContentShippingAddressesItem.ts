@@ -5,12 +5,20 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+
 export type SiteContentShippingAddressesItem = {
+  /** @minLength 1 */
   id: string;
+  /** @minLength 1 */
   label: string;
+  /** @minLength 1 */
   address: string;
+  /** @minLength 1 */
   city: string;
+  /** @minLength 1 */
   postalCode: string;
+  /** @minLength 1 */
   country: string;
+  /** @minimum 0 */
   shippingFeeCents: number;
 };

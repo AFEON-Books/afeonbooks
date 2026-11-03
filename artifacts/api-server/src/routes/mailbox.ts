@@ -214,13 +214,13 @@ declare global {
 
 router.use("/mail", requireMailboxOrigin);
 
-router.get("/mail/session", requireUser, requireRole("admin"), async (request, response): Promise<void> => {
+router.get("/mail/session", requireUser, requireRole("staff", "admin"), async (request, response): Promise<void> => {
   const connection = await getMailboxConnection(request);
   response.setHeader("Cache-Control", "no-store");
   response.json(connection ? { unlocked: true, emailAddress: connection.emailAddress, unlockedUntil: connection.unlockedUntil } : { unlocked: false });
 });
 
-router.get("/mail/auth/start", requireUser, requireRole("admin"), async (request, response): Promise<void> => {
+router.get("/mail/auth/start", requireUser, requireRole("staff", "admin"), async (request, response): Promise<void> => {
   const { clientId, clientSecret } = getMailboxOAuthCredentials();
   const redirectUri = getMailboxRedirectUri();
   const sessionTokenHash = getCurrentSessionHash(request);
@@ -253,7 +253,7 @@ router.get("/mail/auth/start", requireUser, requireRole("admin"), async (request
   response.redirect(authorizeUrl.toString());
 });
 
-router.get("/mail/auth/callback", requireUser, requireRole("admin"), async (request, response): Promise<void> => {
+router.get("/mail/auth/callback", requireUser, requireRole("staff", "admin"), async (request, response): Promise<void> => {
   const appUrl = new URL("https://mailsystem.afeonbooks.com/");
   const code = typeof request.query.code === "string" ? request.query.code : "";
   const state = typeof request.query.state === "string" ? request.query.state : "";
@@ -379,7 +379,7 @@ router.get("/mail/auth/callback", requireUser, requireRole("admin"), async (requ
   response.redirect(appUrl.toString());
 });
 
-router.post("/mail/lock", requireUser, requireRole("admin"), async (request, response): Promise<void> => {
+router.post("/mail/lock", requireUser, requireRole("staff", "admin"), async (request, response): Promise<void> => {
   const sessionTokenHash = getCurrentSessionHash(request);
   if (sessionTokenHash) {
     await db.delete(zohoMailConnectionsTable).where(and(
@@ -390,12 +390,12 @@ router.post("/mail/lock", requireUser, requireRole("admin"), async (request, res
   response.status(204).end();
 });
 
-router.get("/mail/folders", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.get("/mail/folders", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   response.setHeader("Cache-Control", "no-store");
   response.json(await getZohoResponse(request.mailboxConnection!, "/folders"));
 });
 
-router.get("/mail/messages", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.get("/mail/messages", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const query = listQuerySchema.safeParse(request.query);
   if (!query.success) {
     response.status(400).json({ error: "Invalid mailbox query." });
@@ -406,7 +406,7 @@ router.get("/mail/messages", requireUser, requireRole("admin"), requireMailbox, 
   response.json(await getZohoResponse(request.mailboxConnection!, `/messages/view?${params}`));
 });
 
-router.get("/mail/search", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.get("/mail/search", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const query = searchQuerySchema.safeParse(request.query);
   if (!query.success) {
     response.status(400).json({ error: "Invalid search query." });
@@ -417,7 +417,7 @@ router.get("/mail/search", requireUser, requireRole("admin"), requireMailbox, as
   response.json(await getZohoResponse(request.mailboxConnection!, `/messages/search?${params}`));
 });
 
-router.get("/mail/messages/:folderId/:messageId", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.get("/mail/messages/:folderId/:messageId", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const folderId = accountIdSchema.safeParse(request.params.folderId);
   const messageId = accountIdSchema.safeParse(request.params.messageId);
   if (!folderId.success || !messageId.success) {
@@ -428,7 +428,7 @@ router.get("/mail/messages/:folderId/:messageId", requireUser, requireRole("admi
   response.json(await getZohoResponse(request.mailboxConnection!, `/folders/${folderId.data}/messages/${messageId.data}/content`));
 });
 
-router.get("/mail/messages/:folderId/:messageId/inline-image", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.get("/mail/messages/:folderId/:messageId/inline-image", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const folderId = accountIdSchema.safeParse(request.params.folderId);
   const messageId = accountIdSchema.safeParse(request.params.messageId);
   const query = inlineImageQuerySchema.safeParse(request.query);
@@ -485,7 +485,7 @@ router.get("/mail/messages/:folderId/:messageId/inline-image", requireUser, requ
   response.json({ contentType, data: image.toString("base64") });
 });
 
-router.post("/mail/messages", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.post("/mail/messages", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const body = sendBodySchema.safeParse(request.body);
   if (!body.success) {
     response.status(400).json({ error: "Invalid email content or recipient." });
@@ -505,7 +505,7 @@ router.post("/mail/messages", requireUser, requireRole("admin"), requireMailbox,
   response.json(await getZohoResponse(request.mailboxConnection!, "/messages", { method: "POST", body: JSON.stringify(payload) }));
 });
 
-router.post("/mail/messages/:folderId/:messageId/reply", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.post("/mail/messages/:folderId/:messageId/reply", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const folderId = accountIdSchema.safeParse(request.params.folderId);
   const messageId = accountIdSchema.safeParse(request.params.messageId);
   const body = sendBodySchema.safeParse(request.body);
@@ -526,7 +526,7 @@ router.post("/mail/messages/:folderId/:messageId/reply", requireUser, requireRol
   response.json(await getZohoResponse(request.mailboxConnection!, `/messages/${messageId.data}`, { method: "POST", body: JSON.stringify(payload) }));
 });
 
-router.post("/mail/messages/:folderId/:messageId/actions", requireUser, requireRole("admin"), requireMailbox, async (request, response): Promise<void> => {
+router.post("/mail/messages/:folderId/:messageId/actions", requireUser, requireRole("staff", "admin"), requireMailbox, async (request, response): Promise<void> => {
   const folderId = accountIdSchema.safeParse(request.params.folderId);
   const messageId = accountIdSchema.safeParse(request.params.messageId);
   const body = actionBodySchema.safeParse(request.body);

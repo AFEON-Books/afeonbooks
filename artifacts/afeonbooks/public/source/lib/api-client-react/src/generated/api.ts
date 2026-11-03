@@ -19,8 +19,10 @@ import type {
 import type {
   CreateOrder,
   CreateOrderParams,
+  CreateOrderResponse,
   CreateProduct,
   CreateProductParams,
+  EditOrderDetails,
   EmailTestResult,
   GetContentParams,
   HealthStatus,
@@ -29,6 +31,8 @@ import type {
   Order,
   OrdersSummary,
   Product,
+  ReorderProductIds,
+  ReorderProducts200,
   SendTestEmail,
   SiteContent,
   UpdateContentParams,
@@ -473,6 +477,86 @@ export const useCreateProduct = <
   return useMutation(getCreateProductMutationOptions(options));
 };
 
+export const getReorderProductsUrl = () => {
+  return `/api/products/reorder`;
+};
+
+export const reorderProducts = async (
+  reorderProductIds: ReorderProductIds,
+  options?: RequestInit,
+): Promise<ReorderProducts200> => {
+  return customFetch<ReorderProducts200>(getReorderProductsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reorderProductIds),
+  });
+};
+
+export const getReorderProductsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProducts>>,
+    TError,
+    { data: BodyType<ReorderProductIds> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderProducts>>,
+  TError,
+  { data: BodyType<ReorderProductIds> },
+  TContext
+> => {
+  const mutationKey = ["reorderProducts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderProducts>>,
+    { data: BodyType<ReorderProductIds> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reorderProducts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReorderProductsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reorderProducts>>
+>;
+export type ReorderProductsMutationBody = BodyType<ReorderProductIds>;
+export type ReorderProductsMutationError = ErrorType<unknown>;
+
+export const useReorderProducts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProducts>>,
+    TError,
+    { data: BodyType<ReorderProductIds> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reorderProducts>>,
+  TError,
+  { data: BodyType<ReorderProductIds> },
+  TContext
+> => {
+  return useMutation(getReorderProductsMutationOptions(options));
+};
+
 export const getGetProductUrl = (id: number) => {
   return `/api/products/${id}`;
 };
@@ -819,8 +903,8 @@ export const createOrder = async (
   createOrder: CreateOrder,
   params?: CreateOrderParams,
   options?: RequestInit,
-): Promise<Order> => {
-  return customFetch<Order>(getCreateOrderUrl(params), {
+): Promise<CreateOrderResponse> => {
+  return customFetch<CreateOrderResponse>(getCreateOrderUrl(params), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -892,6 +976,9 @@ export const useCreateOrder = <
   return useMutation(getCreateOrderMutationOptions(options));
 };
 
+/**
+ * Requires an authenticated owner or staff account, or an X-Order-Access-Token issued for the order.
+ */
 export const getGetOrderUrl = (id: number) => {
   return `/api/orders/${id}`;
 };
@@ -1127,6 +1214,165 @@ export const useDeleteOrder = <
   TContext
 > => {
   return useMutation(getDeleteOrderMutationOptions(options));
+};
+
+export const getRevokeOrderAccessTokensUrl = (id: number) => {
+  return `/api/orders/${id}/access-tokens`;
+};
+
+export const revokeOrderAccessTokens = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRevokeOrderAccessTokensUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRevokeOrderAccessTokensMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeOrderAccessTokens>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeOrderAccessTokens>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["revokeOrderAccessTokens"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeOrderAccessTokens>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return revokeOrderAccessTokens(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeOrderAccessTokensMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeOrderAccessTokens>>
+>;
+
+export type RevokeOrderAccessTokensMutationError = ErrorType<unknown>;
+
+export const useRevokeOrderAccessTokens = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeOrderAccessTokens>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeOrderAccessTokens>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRevokeOrderAccessTokensMutationOptions(options));
+};
+
+export const getEditOrderDetailsUrl = (id: number) => {
+  return `/api/orders/${id}/edit`;
+};
+
+export const editOrderDetails = async (
+  id: number,
+  editOrderDetails: EditOrderDetails,
+  options?: RequestInit,
+): Promise<Order> => {
+  return customFetch<Order>(getEditOrderDetailsUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(editOrderDetails),
+  });
+};
+
+export const getEditOrderDetailsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editOrderDetails>>,
+    TError,
+    { id: number; data: BodyType<EditOrderDetails> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof editOrderDetails>>,
+  TError,
+  { id: number; data: BodyType<EditOrderDetails> },
+  TContext
+> => {
+  const mutationKey = ["editOrderDetails"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof editOrderDetails>>,
+    { id: number; data: BodyType<EditOrderDetails> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return editOrderDetails(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EditOrderDetailsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof editOrderDetails>>
+>;
+export type EditOrderDetailsMutationBody = BodyType<EditOrderDetails>;
+export type EditOrderDetailsMutationError = ErrorType<unknown>;
+
+export const useEditOrderDetails = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editOrderDetails>>,
+    TError,
+    { id: number; data: BodyType<EditOrderDetails> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof editOrderDetails>>,
+  TError,
+  { id: number; data: BodyType<EditOrderDetails> },
+  TContext
+> => {
+  return useMutation(getEditOrderDetailsMutationOptions(options));
 };
 
 export const getSendTestEmailUrl = () => {

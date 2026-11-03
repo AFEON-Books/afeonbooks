@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -21,7 +21,7 @@ const queryClient = new QueryClient();
 
 import React from 'react';
 import { StatusBanner } from "@/components/status-banner";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { CookieBanner } from "@/components/cookie-banner";
 import { setBaseUrl } from "@workspace/api-client-react";
 
@@ -56,6 +56,50 @@ function Router() {
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const [status, setStatus] = useState<"loading" | "denied" | "allowed">("loading");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user || (user.role !== "staff" && user.role !== "admin")) {
+      setStatus("denied");
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({})) as { user?: { role?: string }; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "Unable to verify mailbox access");
+        if (!cancelled) setStatus(data.user?.role === "staff" || data.user?.role === "admin" ? "allowed" : "denied");
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        setError(cause instanceof Error ? cause.message : "Unable to verify mailbox access");
+        setStatus("denied");
+      });
+    return () => { cancelled = true; };
+  }, [loading, user]);
+
+  if (status === "allowed") return <>{children}</>;
+  if (status === "loading" || loading) return <main className="flex min-h-screen items-center justify-center">Checking mailbox access…</main>;
+  if (status === "denied") {
+    const signInUrl = new URL("https://authn.afeonbooks.com/account");
+    signInUrl.searchParams.set("return_to", window.location.href);
+    return (
+      <main className="flex min-h-screen items-center justify-center px-6 text-center">
+        <div className="max-w-md">
+          <h1 className="text-xl font-semibold">Admin mailbox access required</h1>
+          <p className="mt-2 text-sm text-black/60">{error || "Sign in with a verified AFEON staff or admin account that matches your approved GitHub identity."}</p>
+          {!user && <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>Sign in to AFEON</a>}
+        </div>
+      </main>
+    );
+  }
+  return <>{children}</>;
 }
 
 function useImageProtection() {
@@ -121,7 +165,7 @@ function App() {
           <TooltipProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               {!isMailHost && <StatusBanner />}
-              <Router />
+              {isMailHost ? <MailSystemAccessGate><Router /></MailSystemAccessGate> : <Router />}
             </WouterRouter>
             <Toaster />
             {!isMailHost && <CookieBanner />}

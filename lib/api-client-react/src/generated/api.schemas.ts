@@ -207,6 +207,11 @@ export interface CreateProduct {
   sortOrder?: number;
 }
 
+export interface ReorderProductIds {
+  /** @minItems 1 */
+  productIds: number[];
+}
+
 export interface OrderItem {
   id: number;
   productId: number;
@@ -275,6 +280,11 @@ export interface Order {
   landingPage?: string;
   items: OrderItem[];
 }
+
+export type CreateOrderResponse = Order & {
+  /** One-year bearer token for guest order access */
+  accessToken: string;
+};
 
 export interface CreateOrderItem {
   productId: number;
@@ -409,6 +419,10 @@ export type ListProductsParams = {
 
 export type CreateProductParams = {
   school?: SchoolParameter;
+};
+
+export type ReorderProducts200 = {
+  success: boolean;
 };
 
 export type ListOrdersParams = {

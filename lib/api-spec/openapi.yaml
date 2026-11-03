@@ -81,6 +81,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
+  /products/reorder:
+    put:
+      operationId: reorderProducts
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderProductIds" }
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                required: [success]
   /products/{id}:
     get:
       operationId: getProduct
@@ -155,11 +174,12 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Order" }
+              schema: { $ref: "#/components/schemas/CreateOrderResponse" }
   /orders/{id}:
     get:
       operationId: getOrder
       tags: [orders]
+      description: Requires an authenticated owner or staff account, or an X-Order-Access-Token issued for the order.
       parameters:
         - name: id
           in: path
@@ -201,6 +221,18 @@ paths:
       responses:
         "204":
           description: Deleted
+  /orders/{id}/access-tokens:
+    delete:
+      operationId: revokeOrderAccessTokens
+      tags: [orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Guest access revoked
   /orders/{id}/edit:
     patch:
       operationId: editOrderDetails
@@ -414,8 +446,9 @@ components:
         stock: { type: integer }
         active: { type: boolean }
         showInShop: { type: boolean }
+        sortOrder: { type: integer }
         createdAt: { type: string }
-      required: [id, school, name, description, priceCents, currency, imageUrl, stock, active, showInShop, createdAt]
+      required: [id, school, name, description, priceCents, currency, imageUrl, stock, active, showInShop, sortOrder, createdAt]
     CreateProduct:
       type: object
       properties:
@@ -427,7 +460,16 @@ components:
         stock: { type: integer, minimum: 0 }
         active: { type: boolean }
         showInShop: { type: boolean }
+        sortOrder: { type: integer }
       required: [name, description, priceCents, currency, imageUrl, stock, active]
+    ReorderProductIds:
+      type: object
+      properties:
+        productIds:
+          type: array
+          items: { type: integer, minimum: 1 }
+          minItems: 1
+      required: [productIds]
     OrderItem:
       type: object
       properties:
@@ -475,6 +517,13 @@ components:
           type: array
           items: { $ref: "#/components/schemas/OrderItem" }
       required: [id, school, customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, useDefaultAddress, paymentMethod, orderType, paymentStatus, status, subtotalCents, discountCents, shippingCents, totalCents, currency, createdAt, items]
+    CreateOrderResponse:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            accessToken: { type: string, description: One-year bearer token for guest order access }
+          required: [accessToken]
     CreateOrderItem:
       type: object
       properties:

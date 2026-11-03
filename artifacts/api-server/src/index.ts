@@ -39,7 +39,6 @@ async function ensureContentColumns() {
   await pool.query(`
     ALTER TABLE site_content
       ADD COLUMN IF NOT EXISTS school text NOT NULL DEFAULT 'alvarado',
-      ADD COLUMN IF NOT EXISTS admin_pin text NOT NULL DEFAULT '2026',
       ADD COLUMN IF NOT EXISTS orders_enabled text NOT NULL DEFAULT 'true',
       ADD COLUMN IF NOT EXISTS maintenance_mode text NOT NULL DEFAULT 'false',
       ADD COLUMN IF NOT EXISTS checkout_fields text NOT NULL DEFAULT '[]',
@@ -121,7 +120,6 @@ async function ensureAuthTables() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz;
-    UPDATE users SET email_verified_at = now() WHERE email_verified_at IS NULL;
     CREATE TABLE IF NOT EXISTS sessions (
       id serial PRIMARY KEY,
       token_hash text NOT NULL UNIQUE,
@@ -136,9 +134,17 @@ async function ensureAuthTables() {
       type text NOT NULL,
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
+      attempts integer NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE auth_tokens ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS auth_tokens_user_type_idx ON auth_tokens(user_id, type);
+    CREATE TABLE IF NOT EXISTS auth_rate_limits (
+      key text PRIMARY KEY,
+      window_started_at timestamptz NOT NULL,
+      attempts integer NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS auth_rate_limits_window_started_at_idx ON auth_rate_limits(window_started_at);
     CREATE TABLE IF NOT EXISTS loyalty_transactions (
       id serial PRIMARY KEY,
       user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,

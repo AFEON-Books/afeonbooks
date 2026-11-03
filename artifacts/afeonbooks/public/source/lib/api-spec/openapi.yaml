@@ -81,6 +81,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
+  /products/reorder:
+    put:
+      operationId: reorderProducts
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderProductIds" }
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                required: [success]
   /products/{id}:
     get:
       operationId: getProduct
@@ -155,11 +174,12 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Order" }
+              schema: { $ref: "#/components/schemas/CreateOrderResponse" }
   /orders/{id}:
     get:
       operationId: getOrder
       tags: [orders]
+      description: Requires an authenticated owner or staff account, or an X-Order-Access-Token issued for the order.
       parameters:
         - name: id
           in: path
@@ -201,6 +221,38 @@ paths:
       responses:
         "204":
           description: Deleted
+  /orders/{id}/access-tokens:
+    delete:
+      operationId: revokeOrderAccessTokens
+      tags: [orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Guest access revoked
+  /orders/{id}/edit:
+    patch:
+      operationId: editOrderDetails
+      tags: [orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EditOrderDetails" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
   /email/test:
     post:
       operationId: sendTestEmail
@@ -263,6 +315,14 @@ components:
         coverImageUrl: { type: string }
         aboutHeading: { type: string }
         aboutBody: { type: string }
+        faqs:
+          type: array
+          items:
+            type: object
+            properties:
+              question: { type: string }
+              answer: { type: string }
+            required: [question, answer]
         authorsLine: { type: string }
         illustratorLine: { type: string }
         footerNote: { type: string }
@@ -303,7 +363,7 @@ components:
         blogHeroImageUrl: { type: string }
         blogBody: { type: string }
         updatedAt: { type: string }
-      required: [id, school, checkoutFields, brandName, navHomeLabel, heroTitle, heroSubtitle, ctaLabel, ctaUrl, coverImageUrl, aboutHeading, aboutBody, authorsLine, illustratorLine, footerNote, accentColor, defaultShippingLabel, defaultShippingAddress, defaultShippingCity, defaultShippingPostalCode, defaultShippingCountry, shippingAddresses, loyaltyPagesPerDollar, ordersEnabled, emailEnabled, emailFromName, emailFromAddress, emailReplyTo, emailSubject, emailHeading, emailIntro, emailButtonLabel, emailFooter, emailAccentColor, blogTitle, blogSubtitle, blogDate, blogHeroImageUrl, blogBody, updatedAt]
+      required: [id, school, checkoutFields, brandName, navHomeLabel, heroTitle, heroSubtitle, ctaLabel, ctaUrl, coverImageUrl, aboutHeading, aboutBody, faqs, authorsLine, illustratorLine, footerNote, accentColor, defaultShippingLabel, defaultShippingAddress, defaultShippingCity, defaultShippingPostalCode, defaultShippingCountry, shippingAddresses, loyaltyPagesPerDollar, ordersEnabled, emailEnabled, emailFromName, emailFromAddress, emailReplyTo, emailSubject, emailHeading, emailIntro, emailButtonLabel, emailFooter, emailAccentColor, blogTitle, blogSubtitle, blogDate, blogHeroImageUrl, blogBody, updatedAt]
     UpdateSiteContent:
       type: object
       properties:
@@ -325,6 +385,14 @@ components:
         coverImageUrl: { type: string }
         aboutHeading: { type: string }
         aboutBody: { type: string }
+        faqs:
+          type: array
+          items:
+            type: object
+            properties:
+              question: { type: string }
+              answer: { type: string }
+            required: [question, answer]
         authorsLine: { type: string }
         illustratorLine: { type: string }
         footerNote: { type: string }
@@ -364,7 +432,6 @@ components:
         blogDate: { type: string }
         blogHeroImageUrl: { type: string }
         blogBody: { type: string }
-        loyaltyPagesPerDollar: { type: integer, minimum: 0, maximum: 1000000 }
       required: [brandName, navHomeLabel, heroTitle, heroSubtitle, ctaLabel, ctaUrl, coverImageUrl, aboutHeading, aboutBody, authorsLine, illustratorLine, footerNote, accentColor, defaultShippingLabel, defaultShippingAddress, defaultShippingCity, defaultShippingPostalCode, defaultShippingCountry, loyaltyPagesPerDollar, ordersEnabled, emailEnabled, emailFromName, emailFromAddress, emailReplyTo, emailSubject, emailHeading, emailIntro, emailButtonLabel, emailFooter, emailAccentColor, blogTitle, blogSubtitle, blogDate, blogHeroImageUrl, blogBody]
     Product:
       type: object
@@ -379,8 +446,9 @@ components:
         stock: { type: integer }
         active: { type: boolean }
         showInShop: { type: boolean }
+        sortOrder: { type: integer }
         createdAt: { type: string }
-      required: [id, school, name, description, priceCents, currency, imageUrl, stock, active, showInShop, createdAt]
+      required: [id, school, name, description, priceCents, currency, imageUrl, stock, active, showInShop, sortOrder, createdAt]
     CreateProduct:
       type: object
       properties:
@@ -392,7 +460,16 @@ components:
         stock: { type: integer, minimum: 0 }
         active: { type: boolean }
         showInShop: { type: boolean }
+        sortOrder: { type: integer }
       required: [name, description, priceCents, currency, imageUrl, stock, active]
+    ReorderProductIds:
+      type: object
+      properties:
+        productIds:
+          type: array
+          items: { type: integer, minimum: 1 }
+          minItems: 1
+      required: [productIds]
     OrderItem:
       type: object
       properties:
@@ -424,6 +501,7 @@ components:
         status: { type: string }
         estimatedDeliveryDate: { type: string, format: date }
         subtotalCents: { type: integer }
+        discountCents: { type: integer }
         shippingCents: { type: integer }
         totalCents: { type: integer }
         currency: { type: string }
@@ -438,7 +516,14 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/OrderItem" }
-      required: [id, school, customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, useDefaultAddress, paymentMethod, orderType, paymentStatus, status, subtotalCents, shippingCents, totalCents, currency, createdAt, items]
+      required: [id, school, customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, useDefaultAddress, paymentMethod, orderType, paymentStatus, status, subtotalCents, discountCents, shippingCents, totalCents, currency, createdAt, items]
+    CreateOrderResponse:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            accessToken: { type: string, description: One-year bearer token for guest order access }
+          required: [accessToken]
     CreateOrderItem:
       type: object
       properties:
@@ -460,6 +545,7 @@ components:
         shippingAddressId: { type: string }
         classroom: { type: string }
         notes: { type: string }
+        promoCode: { type: string, maxLength: 40 }
         customFields: { type: object, additionalProperties: { type: string } }
         orderType: { type: string, enum: [sale, preorder] }
         utmSource: { type: string }
@@ -484,6 +570,21 @@ components:
           type: string
           format: date
       required: [status]
+    EditOrderDetails:
+      type: object
+      properties:
+        customerName: { type: string, minLength: 1 }
+        customerEmail: { type: string, format: email }
+        customerPhone: { type: string, minLength: 1 }
+        shippingAddress: { type: string, minLength: 1 }
+        city: { type: string, minLength: 1 }
+        postalCode: { type: string, minLength: 1 }
+        country: { type: string, minLength: 1 }
+        classroom: { type: string }
+        notes: { type: string }
+        shippingCents: { type: integer, minimum: 0 }
+        discountCents: { type: integer, minimum: 0 }
+      required: [customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, classroom, notes, shippingCents, discountCents]
     SendTestEmail:
       type: object
       properties:

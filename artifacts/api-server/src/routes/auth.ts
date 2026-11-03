@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { randomBytes } from "node:crypto";
-import { count, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
+import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
   createAuthToken,
@@ -12,14 +12,80 @@ import {
   normalizeEmail,
   publicUser,
   requireRole,
+  requireStaffAccess,
   requireUser,
   verifyPassword,
 } from "../lib/auth";
 import { sendEmail } from "../lib/email";
+import { logger } from "../lib/logger";
 import { verifyTurnstileToken } from "../lib/turnstile";
+import { verifyCloudflareAccessAssertion } from "../lib/cloudflare-access";
 
 const AUTH_URL = (process.env.PUBLIC_AUTH_URL || "https://authn.afeonbooks.com").replace(/\/+$/, "");
 const AUTH_FROM = process.env.ZOHO_AUTH_FROM_ADDRESS || "noreply@afeonbooks.com";
+const INITIAL_ADMIN_EMAIL = normalizeEmail(process.env.INITIAL_ADMIN_EMAIL || "");
+const EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+let rateLimitCleanupAt = 0;
+
+function authCodeHash(value: string): string {
+  const pepper = process.env.AUTH_CODE_PEPPER || process.env.DATABASE_URL;
+  if (!pepper) throw new Error("AUTH_CODE_PEPPER or DATABASE_URL must be configured");
+  return createHmac("sha256", pepper).update(value).digest("hex");
+}
+
+async function consumeRateLimit(key: string, limit: number): Promise<boolean> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - RATE_WINDOW_MS);
+  const [bucket] = await db.insert(authRateLimitsTable)
+    .values({ key, windowStartedAt: now, attempts: 1 })
+    .onConflictDoUpdate({
+      target: authRateLimitsTable.key,
+      set: {
+        attempts: sql`CASE WHEN ${authRateLimitsTable.windowStartedAt} <= ${cutoff} THEN 1 ELSE ${authRateLimitsTable.attempts} + 1 END`,
+        windowStartedAt: sql`CASE WHEN ${authRateLimitsTable.windowStartedAt} <= ${cutoff} THEN ${now} ELSE ${authRateLimitsTable.windowStartedAt} END`,
+      },
+    })
+    .returning({ attempts: authRateLimitsTable.attempts });
+
+  if (Date.now() >= rateLimitCleanupAt) {
+    rateLimitCleanupAt = Date.now() + 60 * 60 * 1000;
+    await db.delete(authRateLimitsTable).where(sql`${authRateLimitsTable.windowStartedAt} < ${new Date(Date.now() - 24 * 60 * 60 * 1000)}`);
+  }
+  return (bucket?.attempts ?? limit + 1) <= limit;
+}
+
+async function sendEmailCode(userId: number, email: string): Promise<void> {
+  const code = randomInt(0, 100_000).toString().padStart(5, "0");
+  const tokenHash = authCodeHash(code);
+  await db.transaction(async (tx) => {
+    await tx.select({ id: usersTable.id }).from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .for("update")
+      .limit(1);
+    await tx.delete(authTokensTable).where(and(eq(authTokensTable.userId, userId), eq(authTokensTable.type, "email_code")));
+    await tx.insert(authTokensTable).values({
+      userId,
+      tokenHash,
+      type: "email_code",
+      expiresAt: new Date(Date.now() + EMAIL_CODE_TTL_MS),
+    });
+  });
+  try {
+    await sendAuthEmail(
+      email,
+      "Your AFEON Books sign-in code",
+      authEmailHtml("Sign in to AFEON Books", `Enter this five-digit code to sign in: ${code}. It expires in 10 minutes.`, `${AUTH_URL}/account`, "Open sign in"),
+    );
+  } catch (error) {
+    await db.delete(authTokensTable).where(and(
+      eq(authTokensTable.userId, userId),
+      eq(authTokensTable.type, "email_code"),
+      eq(authTokensTable.tokenHash, tokenHash),
+    ));
+    throw error;
+  }
+}
 
 function authEmailHtml(title: string, intro: string, link: string, label: string): string {
   const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
@@ -31,6 +97,94 @@ async function sendAuthEmail(to: string, subject: string, html: string): Promise
 }
 
 const router: IRouter = Router();
+
+router.get("/access/check", async (req, res): Promise<void> => {
+  try {
+    await verifyCloudflareAccessAssertion(req);
+    res.set("Cache-Control", "no-store").status(204).end();
+  } catch (error) {
+    logger.warn({ err: error }, "Cloudflare Access check failed");
+    res.status(403).set("Cache-Control", "no-store").json({ error: "Cloudflare Access authorization is required" });
+  }
+});
+
+router.post("/auth/email-lookup", async (req, res): Promise<void> => {
+  if (!(await verifyTurnstileToken(req.body?.["cf-turnstile-response"], "login"))) {
+    res.status(403).json({ error: "Unable to verify request" });
+    return;
+  }
+  const email = typeof req.body?.email === "string" ? normalizeEmail(req.body.email) : "";
+  if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) {
+    res.status(400).json({ error: "A valid email is required" });
+    return;
+  }
+  const emailKey = authCodeHash(`lookup:${email}`);
+  if (!await consumeRateLimit(emailKey, 10)) {
+    res.status(429).json({ error: "Too many sign-in requests. Try again in 15 minutes." });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user) {
+    res.json({ accountFound: false });
+    return;
+  }
+  if (!user.emailVerifiedAt) {
+    res.json({ accountFound: true, requiresVerification: true });
+    return;
+  }
+  if (!await consumeRateLimit(authCodeHash(`code:${email}`), 3)) {
+    res.status(429).json({ error: "Too many codes were requested. Try again in 15 minutes." });
+    return;
+  }
+  await sendEmailCode(user.id, user.email);
+  res.json({ accountFound: true, codeSent: true });
+});
+
+router.post("/auth/email-code/verify", async (req, res): Promise<void> => {
+  if (!(await verifyTurnstileToken(req.body?.["cf-turnstile-response"], "login"))) {
+    res.status(403).json({ error: "Unable to verify request" });
+    return;
+  }
+  const email = typeof req.body?.email === "string" ? normalizeEmail(req.body.email) : "";
+  const code = typeof req.body?.code === "string" ? req.body.code : "";
+  if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email) || !/^\d{5}$/.test(code)) {
+    res.status(400).json({ error: "Enter the email address and five-digit code" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user || !user.emailVerifiedAt) {
+    res.status(400).json({ error: "This sign-in code is invalid or expired" });
+    return;
+  }
+  const tokenHash = authCodeHash(code);
+  const consumed = await db.transaction(async (tx) => {
+    const [token] = await tx.select().from(authTokensTable).where(and(
+      eq(authTokensTable.userId, user.id),
+      eq(authTokensTable.type, "email_code"),
+      isNull(authTokensTable.usedAt),
+      gt(authTokensTable.expiresAt, new Date()),
+    )).for("update").limit(1);
+    if (!token || token.attempts >= 5) return false;
+    const storedHash = Buffer.from(token.tokenHash, "hex");
+    const submittedHash = Buffer.from(tokenHash, "hex");
+    if (storedHash.length !== submittedHash.length || !timingSafeEqual(storedHash, submittedHash)) {
+      const attempts = token.attempts + 1;
+      await tx.update(authTokensTable).set({
+        attempts,
+        usedAt: attempts >= 5 ? new Date() : null,
+      }).where(eq(authTokensTable.id, token.id));
+      return false;
+    }
+    await tx.update(authTokensTable).set({ usedAt: new Date() }).where(eq(authTokensTable.id, token.id));
+    return true;
+  });
+  if (!consumed) {
+    res.status(400).json({ error: "This sign-in code is invalid or expired" });
+    return;
+  }
+  await createSession(user.id, req, res);
+  res.json({ user: publicUser(user) });
+});
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   if (!(await verifyTurnstileToken(req.body?.["cf-turnstile-response"], "signup"))) {
@@ -63,7 +217,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     email: normalizedEmail,
     passwordHash: await hashPassword(password),
     name: name.trim(),
-    role: Number(total) === 0 ? "admin" : null,
+    role: Number(total) === 0 && INITIAL_ADMIN_EMAIL.length > 0 && normalizedEmail === INITIAL_ADMIN_EMAIL ? "admin" : null,
     emailVerifiedAt: null,
   }).returning();
   const token = await createAuthToken(user.id, "verify_email", 1000 * 60 * 60 * 24);
@@ -98,6 +252,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   await createSession(user.id, req, res);
   res.json({ user: publicUser(user) });
+});
+
+router.get("/auth/admin/access", requireUser, requireStaffAccess("staff", "admin"), async (req, res): Promise<void> => {
+  res.set("Cache-Control", "no-store").json({ user: publicUser(req.user!) });
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {

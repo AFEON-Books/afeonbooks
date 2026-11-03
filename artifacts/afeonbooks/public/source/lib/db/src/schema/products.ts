@@ -11,6 +11,7 @@ export const productsTable = pgTable("products", {
   stock: integer("stock").notNull().default(0),
   active: boolean("active").notNull().default(true),
   showInShop: boolean("show_in_shop").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

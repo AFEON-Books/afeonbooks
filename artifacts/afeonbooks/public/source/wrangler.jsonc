@@ -9,7 +9,8 @@
   "assets": {
     "directory": "./artifacts/site/dist/public",
     "binding": "ASSETS",
-    "not_found_handling": "none"
+    "not_found_handling": "none",
+    "run_worker_first": ["/"]
   },
   "routes": [
     {
@@ -18,6 +19,14 @@
     },
     {
       "pattern": "authn.afeonbooks.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "mailsystem.afeonbooks.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "source.afeonbooks.com",
       "custom_domain": true
     }
   ]

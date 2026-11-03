@@ -9,4 +9,5 @@ import type { UpdateOrderStatusStatus } from "./updateOrderStatusStatus";
 
 export interface UpdateOrderStatus {
   status: UpdateOrderStatusStatus;
+  estimatedDeliveryDate?: Date;
 }

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SiteContentCheckoutFieldsItem } from "./siteContentCheckoutFieldsItem";
+import type { SiteContentFaqsItem } from "./siteContentFaqsItem";
 import type { SiteContentSchool } from "./siteContentSchool";
 import type { SiteContentShippingAddressesItem } from "./siteContentShippingAddressesItem";
 
@@ -22,6 +23,7 @@ export interface SiteContent {
   coverImageUrl: string;
   aboutHeading: string;
   aboutBody: string;
+  faqs: SiteContentFaqsItem[];
   authorsLine: string;
   illustratorLine: string;
   footerNote: string;
@@ -32,6 +34,10 @@ export interface SiteContent {
   defaultShippingPostalCode: string;
   defaultShippingCountry: string;
   shippingAddresses: SiteContentShippingAddressesItem[];
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   */
   loyaltyPagesPerDollar: number;
   ordersEnabled: boolean;
   emailEnabled: boolean;

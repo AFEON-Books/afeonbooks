@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, index } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -33,7 +33,14 @@ export const authTokensTable = pgTable("auth_tokens", {
   type: text("type").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const authRateLimitsTable = pgTable("auth_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+  attempts: integer("attempts").notNull().default(0),
+}, (table) => [index("auth_rate_limits_window_started_at_idx").on(table.windowStartedAt)]);
 
 export type UserRow = typeof usersTable.$inferSelect;

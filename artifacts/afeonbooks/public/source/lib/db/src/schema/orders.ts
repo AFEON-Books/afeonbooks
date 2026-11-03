@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { index, pgTable, serial, text, integer, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
@@ -20,6 +20,7 @@ export const ordersTable = pgTable("orders", {
   status: text("status").notNull().default("pending"),
   estimatedDeliveryDate: text("estimated_delivery_date"),
   subtotalCents: integer("subtotal_cents").notNull(),
+  discountCents: integer("discount_cents").notNull().default(0),
   shippingCents: integer("shipping_cents").notNull().default(0),
   totalCents: integer("total_cents").notNull(),
   currency: text("currency").notNull().default("USD"),
@@ -30,8 +31,21 @@ export const ordersTable = pgTable("orders", {
   utmContent: text("utm_content"),
   referrer: text("referrer"),
   landingPage: text("landing_page"),
+  guestAccessRevokedAt: timestamp("guest_access_revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const orderAccessTokensTable = pgTable("order_access_tokens", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => ordersTable.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("order_access_tokens_token_hash_unique").on(table.tokenHash),
+  index("order_access_tokens_order_expiry_idx").on(table.orderId, table.expiresAt),
+]);
 
 export const orderItemsTable = pgTable("order_items", {
   id: serial("id").primaryKey(),

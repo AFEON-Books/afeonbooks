@@ -18,5 +18,6 @@ export interface Product {
   stock: number;
   active: boolean;
   showInShop: boolean;
+  sortOrder: number;
   createdAt: string;
 }

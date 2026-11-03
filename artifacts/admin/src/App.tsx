@@ -399,28 +399,55 @@ function StatusEditRedirect() {
 }
 
 function AdminAccessGate({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<"loading" | "allowed" | "denied">("loading");
+  const [status, setStatus] = useState<"loading" | "signed-out" | "denied" | "allowed">("loading");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
-      .then((response) => response.json() as Promise<{ user?: { role?: string } | null }>)
-      .then(({ user }) => {
-        if (!cancelled) setStatus(user?.role === "admin" ? "allowed" : "denied");
+    fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        if (response.status === 401) {
+          if (!cancelled) setStatus("signed-out");
+          return;
+        }
+        if (response.status === 403) {
+          if (!cancelled) setError(data.error ?? "");
+          if (!cancelled) setStatus("denied");
+          return;
+        }
+        if (!response.ok) throw new Error(data.error ?? "Unable to verify staff access");
+        if (!cancelled) setStatus("allowed");
       })
-      .catch(() => {
-        if (!cancelled) setStatus("denied");
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Unable to verify staff access");
+          setStatus("denied");
+        }
       });
     return () => { cancelled = true; };
   }, []);
 
-  if (status === "loading") return null;
+  if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
+  if (status === "signed-out") {
+    const signInUrl = new URL("https://authn.afeonbooks.com/account");
+    signInUrl.searchParams.set("return_to", window.location.href);
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
+        <div>
+          <h1 className="text-xl font-semibold">Sign in to your AFEON account</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Cloudflare Access has verified your GitHub identity. Sign in with the matching staff email to continue.</p>
+          <a className="mt-5 inline-block rounded bg-primary px-5 py-3 text-primary-foreground" href={signInUrl.toString()}>Continue to account sign-in</a>
+        </div>
+      </main>
+    );
+  }
   if (status === "denied") {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">Admin access required</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Sign in with an account assigned the admin role.</p>
+          <h1 className="text-xl font-semibold">Staff access required</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{error || "This account is not permitted to access the admin system. Sign in with an account assigned the staff or admin role and the GitHub identity approved by Cloudflare Access."}</p>
         </div>
       </main>
     );
@@ -502,10 +529,10 @@ function App() {
               </WouterRouter>
             )}
             {!isPosPath && !isZohoMailPath && <OrderEmailOverlay />}
+            <DebugOverlay />
           </AdminAccessGate>
         )}
         <Toaster position="top-center" richColors />
-        <DebugOverlay />
       </TooltipProvider>
     </QueryClientProvider>
   );

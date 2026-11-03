@@ -20,12 +20,14 @@ export interface CreateOrder {
   customerPhone: string;
   useDefaultAddress: boolean;
   shippingAddress?: string;
-  shippingAddressId?: string;
   city?: string;
   postalCode?: string;
   country?: string;
+  shippingAddressId?: string;
   classroom?: string;
   notes?: string;
+  /** @maxLength 40 */
+  promoCode?: string;
   customFields?: CreateOrderCustomFields;
   orderType?: CreateOrderOrderType;
   utmSource?: string;

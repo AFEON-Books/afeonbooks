@@ -29,7 +29,9 @@ export interface Order {
   orderType: OrderOrderType;
   paymentStatus: OrderPaymentStatus;
   status: string;
+  estimatedDeliveryDate?: Date;
   subtotalCents: number;
+  discountCents: number;
   shippingCents: number;
   totalCents: number;
   currency: string;

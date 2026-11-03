@@ -23,13 +23,25 @@ export type SiteContentCheckoutFieldsItem = {
   required: boolean;
 };
 
+export type SiteContentFaqsItem = {
+  question: string;
+  answer: string;
+};
+
 export type SiteContentShippingAddressesItem = {
+  /** @minLength 1 */
   id: string;
+  /** @minLength 1 */
   label: string;
+  /** @minLength 1 */
   address: string;
+  /** @minLength 1 */
   city: string;
+  /** @minLength 1 */
   postalCode: string;
+  /** @minLength 1 */
   country: string;
+  /** @minimum 0 */
   shippingFeeCents: number;
 };
 
@@ -46,6 +58,7 @@ export interface SiteContent {
   coverImageUrl: string;
   aboutHeading: string;
   aboutBody: string;
+  faqs: SiteContentFaqsItem[];
   authorsLine: string;
   illustratorLine: string;
   footerNote: string;
@@ -56,6 +69,10 @@ export interface SiteContent {
   defaultShippingPostalCode: string;
   defaultShippingCountry: string;
   shippingAddresses: SiteContentShippingAddressesItem[];
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   */
   loyaltyPagesPerDollar: number;
   ordersEnabled: boolean;
   emailEnabled: boolean;
@@ -82,20 +99,30 @@ export type UpdateSiteContentCheckoutFieldsItem = {
   required: boolean;
 };
 
+export type UpdateSiteContentFaqsItem = {
+  question: string;
+  answer: string;
+};
+
 export type UpdateSiteContentShippingAddressesItem = {
+  /** @minLength 1 */
   id: string;
+  /** @minLength 1 */
   label: string;
+  /** @minLength 1 */
   address: string;
+  /** @minLength 1 */
   city: string;
+  /** @minLength 1 */
   postalCode: string;
+  /** @minLength 1 */
   country: string;
+  /** @minimum 0 */
   shippingFeeCents?: number;
 };
 
 export interface UpdateSiteContent {
   checkoutFields?: UpdateSiteContentCheckoutFieldsItem[];
-  shippingAddresses?: UpdateSiteContentShippingAddressesItem[];
-  loyaltyPagesPerDollar: number;
   brandName: string;
   navHomeLabel: string;
   heroTitle: string;
@@ -105,6 +132,7 @@ export interface UpdateSiteContent {
   coverImageUrl: string;
   aboutHeading: string;
   aboutBody: string;
+  faqs?: UpdateSiteContentFaqsItem[];
   authorsLine: string;
   illustratorLine: string;
   footerNote: string;
@@ -114,6 +142,12 @@ export interface UpdateSiteContent {
   defaultShippingCity: string;
   defaultShippingPostalCode: string;
   defaultShippingCountry: string;
+  shippingAddresses?: UpdateSiteContentShippingAddressesItem[];
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   */
+  loyaltyPagesPerDollar: number;
   ordersEnabled: boolean;
   emailEnabled: boolean;
   emailFromName: string;
@@ -150,6 +184,7 @@ export interface Product {
   stock: number;
   active: boolean;
   showInShop: boolean;
+  sortOrder: number;
   createdAt: string;
 }
 
@@ -169,6 +204,12 @@ export interface CreateProduct {
   stock: number;
   active: boolean;
   showInShop?: boolean;
+  sortOrder?: number;
+}
+
+export interface ReorderProductIds {
+  /** @minItems 1 */
+  productIds: number[];
 }
 
 export interface OrderItem {
@@ -223,7 +264,9 @@ export interface Order {
   orderType: OrderOrderType;
   paymentStatus: OrderPaymentStatus;
   status: string;
+  estimatedDeliveryDate?: string;
   subtotalCents: number;
+  discountCents: number;
   shippingCents: number;
   totalCents: number;
   currency: string;
@@ -237,6 +280,11 @@ export interface Order {
   landingPage?: string;
   items: OrderItem[];
 }
+
+export type CreateOrderResponse = Order & {
+  /** One-year bearer token for guest order access */
+  accessToken: string;
+};
 
 export interface CreateOrderItem {
   productId: number;
@@ -272,12 +320,14 @@ export interface CreateOrder {
   customerPhone: string;
   useDefaultAddress: boolean;
   shippingAddress?: string;
-  shippingAddressId?: string;
   city?: string;
   postalCode?: string;
   country?: string;
+  shippingAddressId?: string;
   classroom?: string;
   notes?: string;
+  /** @maxLength 40 */
+  promoCode?: string;
   customFields?: CreateOrderCustomFields;
   orderType?: CreateOrderOrderType;
   utmSource?: string;
@@ -305,6 +355,28 @@ export const UpdateOrderStatusStatus = {
 export interface UpdateOrderStatus {
   status: UpdateOrderStatusStatus;
   estimatedDeliveryDate?: string;
+}
+
+export interface EditOrderDetails {
+  /** @minLength 1 */
+  customerName: string;
+  customerEmail: string;
+  /** @minLength 1 */
+  customerPhone: string;
+  /** @minLength 1 */
+  shippingAddress: string;
+  /** @minLength 1 */
+  city: string;
+  /** @minLength 1 */
+  postalCode: string;
+  /** @minLength 1 */
+  country: string;
+  classroom: string;
+  notes: string;
+  /** @minimum 0 */
+  shippingCents: number;
+  /** @minimum 0 */
+  discountCents: number;
 }
 
 export interface SendTestEmail {
@@ -347,6 +419,10 @@ export type ListProductsParams = {
 
 export type CreateProductParams = {
   school?: SchoolParameter;
+};
+
+export type ReorderProducts200 = {
+  success: boolean;
 };
 
 export type ListOrdersParams = {

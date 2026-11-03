@@ -15,6 +15,11 @@ export const GetContentQueryParams = zod.object({
   school: zod.enum(["alvarado", "shelyn"]).optional(),
 });
 
+export const getContentResponseShippingAddressesItemShippingFeeCentsMin = 0;
+
+export const getContentResponseLoyaltyPagesPerDollarMin = 0;
+export const getContentResponseLoyaltyPagesPerDollarMax = 1000000;
+
 export const GetContentResponse = zod.object({
   id: zod.number(),
   school: zod.enum(["alvarado", "shelyn"]),
@@ -34,6 +39,12 @@ export const GetContentResponse = zod.object({
   coverImageUrl: zod.string(),
   aboutHeading: zod.string(),
   aboutBody: zod.string(),
+  faqs: zod.array(
+    zod.object({
+      question: zod.string(),
+      answer: zod.string(),
+    }),
+  ),
   authorsLine: zod.string(),
   illustratorLine: zod.string(),
   footerNote: zod.string(),
@@ -51,10 +62,15 @@ export const GetContentResponse = zod.object({
       city: zod.string().min(1),
       postalCode: zod.string().min(1),
       country: zod.string().min(1),
-      shippingFeeCents: zod.number().int().min(0),
+      shippingFeeCents: zod
+        .number()
+        .min(getContentResponseShippingAddressesItemShippingFeeCentsMin),
     }),
   ),
-  loyaltyPagesPerDollar: zod.number().int().min(0).max(1000000),
+  loyaltyPagesPerDollar: zod
+    .number()
+    .min(getContentResponseLoyaltyPagesPerDollarMin)
+    .max(getContentResponseLoyaltyPagesPerDollarMax),
   ordersEnabled: zod.boolean(),
   emailEnabled: zod.boolean(),
   emailFromName: zod.string(),
@@ -78,6 +94,11 @@ export const UpdateContentQueryParams = zod.object({
   school: zod.enum(["alvarado", "shelyn"]).optional(),
 });
 
+export const updateContentBodyShippingAddressesItemShippingFeeCentsMin = 0;
+
+export const updateContentBodyLoyaltyPagesPerDollarMin = 0;
+export const updateContentBodyLoyaltyPagesPerDollarMax = 1000000;
+
 export const UpdateContentBody = zod.object({
   checkoutFields: zod
     .array(
@@ -97,6 +118,14 @@ export const UpdateContentBody = zod.object({
   coverImageUrl: zod.string(),
   aboutHeading: zod.string(),
   aboutBody: zod.string(),
+  faqs: zod
+    .array(
+      zod.object({
+        question: zod.string(),
+        answer: zod.string(),
+      }),
+    )
+    .optional(),
   authorsLine: zod.string(),
   illustratorLine: zod.string(),
   footerNote: zod.string(),
@@ -115,11 +144,17 @@ export const UpdateContentBody = zod.object({
         city: zod.string().min(1),
         postalCode: zod.string().min(1),
         country: zod.string().min(1),
-        shippingFeeCents: zod.number().int().min(0).optional(),
+        shippingFeeCents: zod
+          .number()
+          .min(updateContentBodyShippingAddressesItemShippingFeeCentsMin)
+          .optional(),
       }),
     )
     .optional(),
-  loyaltyPagesPerDollar: zod.number().int().min(0).max(1000000),
+  loyaltyPagesPerDollar: zod
+    .number()
+    .min(updateContentBodyLoyaltyPagesPerDollarMin)
+    .max(updateContentBodyLoyaltyPagesPerDollarMax),
   ordersEnabled: zod.boolean(),
   emailEnabled: zod.boolean(),
   emailFromName: zod.string(),
@@ -138,6 +173,11 @@ export const UpdateContentBody = zod.object({
   blogBody: zod.string(),
 });
 
+export const updateContentResponseShippingAddressesItemShippingFeeCentsMin = 0;
+
+export const updateContentResponseLoyaltyPagesPerDollarMin = 0;
+export const updateContentResponseLoyaltyPagesPerDollarMax = 1000000;
+
 export const UpdateContentResponse = zod.object({
   id: zod.number(),
   school: zod.enum(["alvarado", "shelyn"]),
@@ -148,17 +188,6 @@ export const UpdateContentResponse = zod.object({
       required: zod.boolean(),
     }),
   ),
-  shippingAddresses: zod.array(
-    zod.object({
-      id: zod.string().min(1),
-      label: zod.string().min(1),
-      address: zod.string().min(1),
-      city: zod.string().min(1),
-      postalCode: zod.string().min(1),
-      country: zod.string().min(1),
-    }),
-  ),
-  loyaltyPagesPerDollar: zod.number().int().min(0).max(1000000),
   brandName: zod.string(),
   navHomeLabel: zod.string(),
   heroTitle: zod.string(),
@@ -168,6 +197,12 @@ export const UpdateContentResponse = zod.object({
   coverImageUrl: zod.string(),
   aboutHeading: zod.string(),
   aboutBody: zod.string(),
+  faqs: zod.array(
+    zod.object({
+      question: zod.string(),
+      answer: zod.string(),
+    }),
+  ),
   authorsLine: zod.string(),
   illustratorLine: zod.string(),
   footerNote: zod.string(),
@@ -177,6 +212,23 @@ export const UpdateContentResponse = zod.object({
   defaultShippingCity: zod.string(),
   defaultShippingPostalCode: zod.string(),
   defaultShippingCountry: zod.string(),
+  shippingAddresses: zod.array(
+    zod.object({
+      id: zod.string().min(1),
+      label: zod.string().min(1),
+      address: zod.string().min(1),
+      city: zod.string().min(1),
+      postalCode: zod.string().min(1),
+      country: zod.string().min(1),
+      shippingFeeCents: zod
+        .number()
+        .min(updateContentResponseShippingAddressesItemShippingFeeCentsMin),
+    }),
+  ),
+  loyaltyPagesPerDollar: zod
+    .number()
+    .min(updateContentResponseLoyaltyPagesPerDollarMin)
+    .max(updateContentResponseLoyaltyPagesPerDollarMax),
   ordersEnabled: zod.boolean(),
   emailEnabled: zod.boolean(),
   emailFromName: zod.string(),
@@ -211,6 +263,7 @@ export const ListProductsResponseItem = zod.object({
   stock: zod.number(),
   active: zod.boolean(),
   showInShop: zod.boolean(),
+  sortOrder: zod.number(),
   createdAt: zod.string(),
 });
 export const ListProductsResponse = zod.array(ListProductsResponseItem);
@@ -237,7 +290,16 @@ export const CreateProductBody = zod.object({
   imageUrl: zod.string(),
   stock: zod.number().min(createProductBodyStockMin),
   active: zod.boolean(),
-  showInShop: zod.boolean().default(true),
+  showInShop: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const ReorderProductsBody = zod.object({
+  productIds: zod.array(zod.number().min(1)).min(1),
+});
+
+export const ReorderProductsResponse = zod.object({
+  success: zod.boolean(),
 });
 
 export const GetProductParams = zod.object({
@@ -254,7 +316,8 @@ export const GetProductResponse = zod.object({
   imageUrl: zod.string(),
   stock: zod.number(),
   active: zod.boolean(),
-  showInShop: zod.boolean().optional(),
+  showInShop: zod.boolean(),
+  sortOrder: zod.number(),
   createdAt: zod.string(),
 });
 
@@ -280,7 +343,8 @@ export const UpdateProductBody = zod.object({
   imageUrl: zod.string(),
   stock: zod.number().min(updateProductBodyStockMin),
   active: zod.boolean(),
-  showInShop: zod.boolean(),
+  showInShop: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -294,6 +358,7 @@ export const UpdateProductResponse = zod.object({
   stock: zod.number(),
   active: zod.boolean(),
   showInShop: zod.boolean(),
+  sortOrder: zod.number(),
   createdAt: zod.string(),
 });
 
@@ -323,7 +388,9 @@ export const ListOrdersResponseItem = zod.object({
   orderType: zod.enum(["sale", "preorder"]),
   paymentStatus: zod.enum(["due", "due_later", "paid"]),
   status: zod.string(),
+  estimatedDeliveryDate: zod.coerce.date().optional(),
   subtotalCents: zod.number(),
+  discountCents: zod.number(),
   shippingCents: zod.number(),
   totalCents: zod.number(),
   currency: zod.string(),
@@ -355,6 +422,8 @@ export const createOrderBodyCustomerEmailMin = 3;
 
 export const createOrderBodyCustomerPhoneMin = 3;
 
+export const createOrderBodyPromoCodeMax = 40;
+
 export const CreateOrderBody = zod.object({
   school: zod.enum(["alvarado", "shelyn"]).optional(),
   customerName: zod.string().min(1),
@@ -362,12 +431,13 @@ export const CreateOrderBody = zod.object({
   customerPhone: zod.string().min(createOrderBodyCustomerPhoneMin),
   useDefaultAddress: zod.boolean(),
   shippingAddress: zod.string().optional(),
-  shippingAddressId: zod.string().optional(),
   city: zod.string().optional(),
   postalCode: zod.string().optional(),
   country: zod.string().optional(),
+  shippingAddressId: zod.string().optional(),
   classroom: zod.string().optional(),
   notes: zod.string().optional(),
+  promoCode: zod.string().max(createOrderBodyPromoCodeMax).optional(),
   customFields: zod.record(zod.string(), zod.string()).optional(),
   orderType: zod.enum(["sale", "preorder"]).optional(),
   utmSource: zod.string().optional(),
@@ -387,6 +457,9 @@ export const CreateOrderBody = zod.object({
     .min(1),
 });
 
+/**
+ * Requires an authenticated owner or staff account, or an X-Order-Access-Token issued for the order.
+ */
 export const GetOrderParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -409,7 +482,9 @@ export const GetOrderResponse = zod.object({
   orderType: zod.enum(["sale", "preorder"]),
   paymentStatus: zod.enum(["due", "due_later", "paid"]),
   status: zod.string(),
+  estimatedDeliveryDate: zod.coerce.date().optional(),
   subtotalCents: zod.number(),
+  discountCents: zod.number(),
   shippingCents: zod.number(),
   totalCents: zod.number(),
   currency: zod.string(),
@@ -444,7 +519,7 @@ export const UpdateOrderStatusBody = zod.object({
     "delivered",
     "cancelled",
   ]),
-  estimatedDeliveryDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  estimatedDeliveryDate: zod.coerce.date().optional(),
 });
 
 export const UpdateOrderStatusResponse = zod.object({
@@ -465,8 +540,9 @@ export const UpdateOrderStatusResponse = zod.object({
   orderType: zod.enum(["sale", "preorder"]),
   paymentStatus: zod.enum(["due", "due_later", "paid"]),
   status: zod.string(),
-  estimatedDeliveryDate: zod.string().optional(),
+  estimatedDeliveryDate: zod.coerce.date().optional(),
   subtotalCents: zod.number(),
+  discountCents: zod.number(),
   shippingCents: zod.number(),
   totalCents: zod.number(),
   currency: zod.string(),
@@ -491,6 +567,75 @@ export const UpdateOrderStatusResponse = zod.object({
 
 export const DeleteOrderParams = zod.object({
   id: zod.coerce.number(),
+});
+
+export const RevokeOrderAccessTokensParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const EditOrderDetailsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const editOrderDetailsBodyShippingCentsMin = 0;
+
+export const editOrderDetailsBodyDiscountCentsMin = 0;
+
+export const EditOrderDetailsBody = zod.object({
+  customerName: zod.string().min(1),
+  customerEmail: zod.string().email(),
+  customerPhone: zod.string().min(1),
+  shippingAddress: zod.string().min(1),
+  city: zod.string().min(1),
+  postalCode: zod.string().min(1),
+  country: zod.string().min(1),
+  classroom: zod.string(),
+  notes: zod.string(),
+  shippingCents: zod.number().min(editOrderDetailsBodyShippingCentsMin),
+  discountCents: zod.number().min(editOrderDetailsBodyDiscountCentsMin),
+});
+
+export const EditOrderDetailsResponse = zod.object({
+  id: zod.number(),
+  school: zod.enum(["alvarado", "shelyn"]),
+  customerName: zod.string(),
+  customerEmail: zod.string(),
+  customerPhone: zod.string(),
+  shippingAddress: zod.string(),
+  city: zod.string(),
+  postalCode: zod.string(),
+  country: zod.string(),
+  classroom: zod.string().optional(),
+  useDefaultAddress: zod.boolean(),
+  notes: zod.string().optional(),
+  customFields: zod.record(zod.string(), zod.string()).optional(),
+  paymentMethod: zod.string(),
+  orderType: zod.enum(["sale", "preorder"]),
+  paymentStatus: zod.enum(["due", "due_later", "paid"]),
+  status: zod.string(),
+  estimatedDeliveryDate: zod.coerce.date().optional(),
+  subtotalCents: zod.number(),
+  discountCents: zod.number(),
+  shippingCents: zod.number(),
+  totalCents: zod.number(),
+  currency: zod.string(),
+  createdAt: zod.string(),
+  utmSource: zod.string().optional(),
+  utmMedium: zod.string().optional(),
+  utmCampaign: zod.string().optional(),
+  utmTerm: zod.string().optional(),
+  utmContent: zod.string().optional(),
+  referrer: zod.string().optional(),
+  landingPage: zod.string().optional(),
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      productId: zod.number(),
+      productName: zod.string(),
+      quantity: zod.number(),
+      unitPriceCents: zod.number(),
+    }),
+  ),
 });
 
 export const sendTestEmailBodyToMin = 3;

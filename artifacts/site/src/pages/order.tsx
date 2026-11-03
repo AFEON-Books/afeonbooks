@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "wouter";
 import { useGetContent, useGetOrder } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,14 @@ import { CheckCircle2, Printer } from "lucide-react";
 export default function Order() {
   const { id } = useParams();
   const orderId = parseInt(id || "0", 10);
+  const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token") ?? "";
+  const [receiptError, setReceiptError] = useState("");
   const { data: content } = useGetContent();
-  const { data: order, isLoading, isError } = useGetOrder(orderId);
+  const { data: order, isLoading, isError } = useGetOrder(orderId, {
+    request: {
+      headers: accessToken ? { "X-Order-Access-Token": accessToken } : undefined,
+    },
+  });
 
   if (isLoading) {
     return (
@@ -38,10 +45,23 @@ export default function Order() {
     );
   }
 
-  const printReceipt = () => {
-    const popup = window.open(`/order/${order.id}/pdf`, "_blank", "noopener,noreferrer");
-    if (!popup) {
-      window.location.href = `/order/${order.id}/pdf`;
+  const printReceipt = async () => {
+    setReceiptError("");
+    const popup = window.open("about:blank", "_blank");
+    if (popup) popup.opener = null;
+    try {
+      const response = await fetch(`/order/${order.id}/pdf`, {
+        headers: accessToken ? { "X-Order-Access-Token": accessToken } : undefined,
+      });
+      if (!response.ok) throw new Error("Unable to load the receipt.");
+
+      const pdfUrl = URL.createObjectURL(await response.blob());
+      if (popup) popup.location.href = pdfUrl;
+      else window.location.assign(pdfUrl);
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+    } catch (error) {
+      popup?.close();
+      setReceiptError(error instanceof Error ? error.message : "Unable to load the receipt.");
     }
   };
 
@@ -119,6 +139,7 @@ export default function Order() {
               <Link href="/shop">Continue Shopping</Link>
             </Button>
           </div>
+          {receiptError && <p role="alert" className="mt-4 text-center text-sm text-red-700">{receiptError}</p>}
         </div>
       </main>
 

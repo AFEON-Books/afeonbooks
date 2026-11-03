@@ -291,6 +291,15 @@ export const CreateProductBody = zod.object({
   stock: zod.number().min(createProductBodyStockMin),
   active: zod.boolean(),
   showInShop: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const ReorderProductsBody = zod.object({
+  productIds: zod.array(zod.number().min(1)).min(1),
+});
+
+export const ReorderProductsResponse = zod.object({
+  success: zod.boolean(),
 });
 
 export const GetProductParams = zod.object({
@@ -335,11 +344,7 @@ export const UpdateProductBody = zod.object({
   stock: zod.number().min(updateProductBodyStockMin),
   active: zod.boolean(),
   showInShop: zod.boolean().optional(),
-  sortOrder: zod.number().int().optional(),
-});
-
-export const ReorderProductsBody = zod.object({
-  productIds: zod.array(zod.number().int().positive()).min(1),
+  sortOrder: zod.number().optional(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -452,6 +457,9 @@ export const CreateOrderBody = zod.object({
     .min(1),
 });
 
+/**
+ * Requires an authenticated owner or staff account, or an X-Order-Access-Token issued for the order.
+ */
 export const GetOrderParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -558,6 +566,10 @@ export const UpdateOrderStatusResponse = zod.object({
 });
 
 export const DeleteOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RevokeOrderAccessTokensParams = zod.object({
   id: zod.coerce.number(),
 });
 

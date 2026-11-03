@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "fs/promises";
 import path from "path";
 
@@ -10,23 +11,62 @@ if (!targetArg) {
 
 const target = path.resolve(process.cwd(), targetArg);
 const targetRel = path.relative(repoRoot, target).replace(/\\/g, "/");
+if (!/^artifacts\/[^/]+\/(?:public\/source|dist\/public\/source)$/.test(targetRel)) {
+  throw new Error("Export target must be an artifact public/source directory.");
+}
 
-const excludeNames = new Set([".git", "node_modules", ".cache"]);
-const excludePrefixes = [
-  "dist/",
-  "artifacts/" + path.sep + "*" + path.sep + "dist/public/source",
-  "artifacts/" + path.sep + "*" + path.sep + "dist/public/assets",
-].map((prefix) => prefix.replace(/\\/g, "/"));
+const excludeNames = new Set([".git", "node_modules", ".cache", "mm-ai-inst.txt"]);
+const privateFileExtensions = new Set([
+  ".bak",
+  ".backup",
+  ".csv",
+  ".db",
+  ".dump",
+  ".key",
+  ".pem",
+  ".p12",
+  ".pfx",
+  ".sqlite",
+  ".sqlite3",
+  ".sql",
+  ".xls",
+  ".xlsx",
+]);
+const exportableFiles = new Set(
+  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean),
+);
 
 function normalizeRel(filePath) {
   return path.relative(repoRoot, filePath).replace(/\\/g, "/");
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function shouldExclude(filePath) {
   const rel = normalizeRel(filePath);
+  const name = path.basename(filePath).toLowerCase();
+  const extension = path.extname(name);
   if (!rel || rel === ".") return false;
   if (rel === targetRel || rel.startsWith(`${targetRel}/`)) return true;
   if (excludeNames.has(path.basename(filePath))) return true;
+  if (
+    name.startsWith(".env") ||
+    name.includes("backup") ||
+    name.includes("production-export") ||
+    name === "zipfile.zip" ||
+    (privateFileExtensions.has(extension) &&
+      !(extension === ".sql" && rel.startsWith("lib/db/migrations/")))
+  ) return true;
   if (rel.startsWith("dist/") || rel.startsWith("artifacts/") || rel.startsWith("public/source")) return true;
   if (rel.startsWith(".replit-artifact") || rel.startsWith("artifacts/")) {
     if (rel.includes("dist/public/source") || rel.includes("dist/public/assets") || rel.includes("dist/")) return true;
@@ -47,9 +87,10 @@ async function copyDirectory(src, dest) {
       if (entry.isDirectory()) {
         await copyDirectory(srcPath, destPath);
       } else if (entry.isSymbolicLink()) {
+        if (!exportableFiles.has(normalizeRel(srcPath))) return;
         const linkTarget = await fs.readlink(srcPath);
         await fs.symlink(linkTarget, destPath);
-      } else if (entry.isFile()) {
+      } else if (entry.isFile() && exportableFiles.has(normalizeRel(srcPath))) {
         await fs.copyFile(srcPath, destPath);
       }
     })
@@ -59,14 +100,13 @@ async function copyDirectory(src, dest) {
 async function buildIndexHtml(rootTarget) {
   const entries = [];
 
-  async function walkDir(dir) {
+  async function walkDir(dir, relativeDirectory = "") {
     const names = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of names) {
       const srcPath = path.join(dir, entry.name);
-      if (shouldExclude(srcPath)) continue;
-      const relPath = normalizeRel(srcPath);
+      const relPath = path.posix.join(relativeDirectory, entry.name);
       if (entry.isDirectory()) {
-        await walkDir(srcPath);
+        await walkDir(srcPath, relPath);
       } else if (entry.isFile()) {
         entries.push(relPath);
       }
@@ -78,8 +118,8 @@ async function buildIndexHtml(rootTarget) {
 
   const rows = entries
     .map((entry) => {
-      const url = `/source/${encodeURI(entry).replace(/%2F/g, "/")}`;
-      return `<li><a href="${url}" target="_blank" rel="noopener noreferrer">${entry}</a></li>`;
+      const url = `/source/${entry.split("/").map(encodeURIComponent).join("/")}`;
+      return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(entry)}</a></li>`;
     })
     .join("\n        ");
 

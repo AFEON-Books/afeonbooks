@@ -139,7 +139,12 @@ export async function sendOrderConfirmation(input:RenderEmailInput):Promise<void
   }
 }
 
-export async function sendOrderStatusUpdateEmail(order: OrderRow, status: string, estimatedDeliveryDate?: string | null): Promise<void> {
+export async function sendOrderStatusUpdateEmail(
+  order: OrderRow,
+  status: string,
+  estimatedDeliveryDate?: string | null,
+  accessToken?: string,
+): Promise<void> {
   const configured = Boolean(process.env.ZOHO_MAIL_REFRESH_TOKEN && process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET && process.env.ZOHO_MAIL_ACCOUNT_ID);
   if (!configured) {
     logger.warn({ orderId: order.id, status }, "order status email skipped: Zoho Mail credentials are not fully configured");
@@ -147,7 +152,8 @@ export async function sendOrderStatusUpdateEmail(order: OrderRow, status: string
   }
 
   const fromAddress = "noreply@afeonbooks.com";
-  const orderUrl = `https://afeonbooks.com/order/${order.id}`;
+  const siteUrl = (process.env.PUBLIC_SITE_URL || "https://afeonbooks.com").replace(/\/+$/, "");
+  const orderUrl = `${siteUrl}/order/${order.id}${accessToken ? `#access_token=${encodeURIComponent(accessToken)}` : ""}`;
   const customerName = escapeHtml(order.customerName);
   const safeStatus = escapeHtml(status.replace(/_/g, " "));
   const deliveryHtml = estimatedDeliveryDate ? `<p>Estimated delivery date: <strong>${escapeHtml(estimatedDeliveryDate)}</strong></p>` : "";

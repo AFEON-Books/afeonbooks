@@ -6,12 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UpdateSiteContentCheckoutFieldsItem } from "./updateSiteContentCheckoutFieldsItem";
+import type { UpdateSiteContentFaqsItem } from "./updateSiteContentFaqsItem";
 import type { UpdateSiteContentShippingAddressesItem } from "./updateSiteContentShippingAddressesItem";
 
 export interface UpdateSiteContent {
   checkoutFields?: UpdateSiteContentCheckoutFieldsItem[];
-  shippingAddresses?: UpdateSiteContentShippingAddressesItem[];
-  loyaltyPagesPerDollar: number;
   brandName: string;
   navHomeLabel: string;
   heroTitle: string;
@@ -21,6 +20,7 @@ export interface UpdateSiteContent {
   coverImageUrl: string;
   aboutHeading: string;
   aboutBody: string;
+  faqs?: UpdateSiteContentFaqsItem[];
   authorsLine: string;
   illustratorLine: string;
   footerNote: string;
@@ -30,6 +30,12 @@ export interface UpdateSiteContent {
   defaultShippingCity: string;
   defaultShippingPostalCode: string;
   defaultShippingCountry: string;
+  shippingAddresses?: UpdateSiteContentShippingAddressesItem[];
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   */
+  loyaltyPagesPerDollar: number;
   ordersEnabled: boolean;
   emailEnabled: boolean;
   emailFromName: string;
@@ -41,4 +47,9 @@ export interface UpdateSiteContent {
   emailButtonLabel: string;
   emailFooter: string;
   emailAccentColor: string;
+  blogTitle: string;
+  blogSubtitle: string;
+  blogDate: string;
+  blogHeroImageUrl: string;
+  blogBody: string;
 }

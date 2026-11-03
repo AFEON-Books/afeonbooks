@@ -233,7 +233,7 @@ export default function Checkout() {
         clearUtm();
         queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetOrdersSummaryQueryKey() });
-        setLocation(`/order/${order.id}`);
+        setLocation(`/order/${order.id}#access_token=${encodeURIComponent(order.accessToken)}`);
       },
       onError: () => {
         toast.error("Failed to place order. Please try again.");

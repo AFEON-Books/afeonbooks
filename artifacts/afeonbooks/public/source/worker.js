@@ -1,17 +1,39 @@
 async function isMaintenanceMode() {
-  try {
-    const response = await fetch(
-      "https://status.afeonbooks.com/api/v2/status.json",
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (!response.ok) return false;
-
-    const data = await response.json();
-
-    return data?.status?.indicator === "maintenance";
-  } catch {
-    return false;
+  const response = await fetch("https://api.afeonbooks.com/api/maintenance/status", {
+    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`Maintenance status check failed with status ${response.status}`);
   }
+
+  const data = await response.json();
+  if (!data || typeof data.enabled !== "boolean") {
+    throw new Error("Maintenance status check returned an invalid response");
+  }
+  return data.enabled;
+}
+
+async function validateAccessAssertion(assertion) {
+  if (!assertion || assertion.length > 3500) return false;
+  const response = await fetch("https://api.afeonbooks.com/api/access/check", {
+    headers: { Accept: "application/json", "cf-access-jwt-assertion": assertion },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (response.status === 403) return false;
+  if (!response.ok) throw new Error(`Cloudflare Access validation failed with HTTP ${response.status}`);
+  return true;
+}
+
+function protectedAccessResponse(response, assertion) {
+  const headers = new Headers(response.headers);
+  headers.append("Set-Cookie", `afeonbooks_access=${encodeURIComponent(assertion)}; Domain=.afeonbooks.com; Path=/; Max-Age=900; Secure; HttpOnly; SameSite=Lax`);
+  headers.set("Cache-Control", "private, no-store");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function pdfEscape(value) {
@@ -109,7 +131,12 @@ async function getCheckoutFieldLabels() {
 
 async function orderPdfResponse(request, orderId) {
   const apiUrl = new URL(`https://api.afeonbooks.com/api/orders/${encodeURIComponent(orderId)}`);
-  const apiResponse = await fetch(new Request(apiUrl, { method: "GET", headers: { Accept: "application/json" } }));
+  const headers = new Headers({ Accept: "application/json" });
+  const accessToken = request.headers.get("X-Order-Access-Token");
+  const cookie = request.headers.get("Cookie");
+  if (accessToken) headers.set("X-Order-Access-Token", accessToken);
+  if (cookie) headers.set("Cookie", cookie);
+  const apiResponse = await fetch(new Request(apiUrl, { method: "GET", headers }));
 
   if (!apiResponse.ok) {
     return new Response(apiResponse.status === 404 ? "Order not found" : "Unable to load order", {
@@ -178,26 +205,15 @@ function maintenanceResponse() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="60">
-  <title>Service Under Maintenance</title>
   <style>
-    * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; background: #101827; color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; }
-    .status-banner { display: block; padding: 12px 20px; background: #9d2f20; color: #fff; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
-    main { max-width: 34rem; }
-    .content { min-height: calc(100vh - 48px); display: grid; place-items: center; padding: 24px; }
-    img { width: min(12rem, 60vw); height: auto; }
-    h1 { margin: 1.5rem 0 0.5rem; font-size: clamp(1.75rem, 7vw, 2.5rem); }
-    p { margin: 0; color: #cbd5e1; }
+    body { display: flex; flex-direction: column; width: 100%; height: 100vh; height: 100dvh; margin: 0; background: #101827; text-align: center; }
+    .status-banner { flex: 0 0 auto; display: block; padding: 12px 20px; background: #9d2f20; color: #fff; font: 600 16px/1.5 system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+    img { flex: 1 1 auto; min-height: 0; width: 100%; object-fit: contain; }
   </style>
 </head>
 <body>
   <a class="status-banner" href="https://status.afeonbooks.com/" target="_blank" rel="noopener noreferrer">Service Under Maintenance — view status updates</a>
-  <div class="content">
-    <main>
-      <img src="https://msxfhfdeqxqvjuypcspm.supabase.co/storage/v1/object/public/photos/totec-maintenence.svg" alt="Maintenance in progress">
-    </main>
-  </div>
+  <img src="https://msxfhfdeqxqvjuypcspm.supabase.co/storage/v1/object/public/photos/totec-maintenence.svg" alt="Maintenance in progress">
 </body>
 </html>`,
     {
@@ -211,12 +227,246 @@ function maintenanceResponse() {
   );
 }
 
+function addSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function directoryKeyMatches(url, env) {
   return typeof env.DIRECTORY_KEY === "string" && env.DIRECTORY_KEY.length > 0 && url.searchParams.get("key") === env.DIRECTORY_KEY;
 }
 
+async function getAdminUserFromSession(request) {
+  const cookie = request.headers.get("Cookie");
+  if (!cookie) return null;
+  const assertion = request.headers.get("Cf-Access-Jwt-Assertion");
+
+  const headers = {
+    Accept: "application/json",
+    Cookie: cookie,
+  };
+  if (assertion) headers["Cf-Access-Jwt-Assertion"] = assertion;
+  const response = await fetch("https://api.afeonbooks.com/api/auth/admin/access", {
+    headers,
+    redirect: "manual",
+  });
+
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) {
+    throw new Error(`Admin session check failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload || !Object.hasOwn(payload, "user")) {
+    throw new Error("Admin session check returned an invalid response");
+  }
+  return { user: payload.user ?? null };
+}
+
+function sourceAuthError(status, message) {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify admin access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account">Open your AFEON account</a></p></main></body></html>`,
+    {
+      status,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
+
+function sourceDashboardHtml() {
+  const panels = [
+    { name: "GitHub", url: "https://github.com/acdu1/afeonbooks", embed: false },
+    { name: "GitHub Codespaces", url: "https://ubiquitous-guacamole-x545p5p7996439pxj.github.dev/", embed: false },
+    { name: "Cloudflare Dashboard", url: "https://dash.cloudflare.com/a130548b1748b2365a5c0e027fe3ebd8/home", embed: false },
+    { name: "Supabase", url: "https://supabase.com/dashboard/project/msxfhfdeqxqvjuypcspm", embed: false },
+    { name: "Render", url: "https://dashboard.render.com/web/srv-da57c6jbc2fs738388lg", embed: false },
+    { name: "StatusPage", url: "https://status.afeonbooks.com/", embed: false },
+    { name: "Reedsy Book Editor", url: "https://editor.reedsy.com/", embed: true },
+  ];
+
+  const iframeMarkup = panels
+    .map(
+      ({ name, url, embed }) => `
+        <section class="panel">
+          <div class="panel-header">
+            <h2>${name}</h2>
+            <a href="${url}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+          </div>
+          ${embed
+            ? `<iframe
+                src="${url}"
+                title="${name}"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+                sandbox="allow-forms allow-popups allow-scripts allow-same-origin"
+              ></iframe>`
+            : `<div class="embed-unavailable">
+                <p>This service does not allow its dashboard to be embedded here. Open it in a new tab to sign in and use it.</p>
+                <a class="open-service" href="${url}" target="_blank" rel="noopener noreferrer">Open ${name}</a>
+              </div>`
+          }
+        </section>
+      `,
+    )
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AFEON Books Infrastructure</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f3ee;
+        --panel: #fff;
+        --text: #171717;
+        --muted: #5b5b5b;
+        --border: rgba(23, 23, 23, 0.12);
+        --accent: #111827;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .page {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      h1 {
+        margin: 6px 0 0;
+        font-size: clamp(2rem, 3vw, 2.8rem);
+        line-height: 1.1;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 24px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--border);
+        padding: 12px 16px;
+      }
+      .panel-header h2 {
+        margin: 0;
+        font-size: 0.95rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .panel-header a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.8rem;
+      }
+      .embed-unavailable {
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 16px;
+        padding: 24px;
+      }
+      .embed-unavailable p {
+        max-width: 34rem;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .open-service {
+        display: inline-flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 0 16px;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      .open-service:hover { opacity: 0.86; }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 520px;
+        border: 0;
+        background: #fff;
+      }
+      @media (max-width: 700px) {
+        .page { padding-top: 20px; }
+        iframe { height: 400px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="topbar">
+        <div>
+          <div class="eyebrow">AFEON Books</div>
+          <h1>Infrastructure dashboard</h1>
+        </div>
+      </div>
+      <div class="grid">
+        ${iframeMarkup}
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 function directoryResponse(status = 404, body = "Not Found") {
   return new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function directoryHtml(files, key, selectedFile = "") {
@@ -228,8 +478,8 @@ function directoryHtml(files, key, selectedFile = "") {
     folders.get(folder).push(file);
   }
   const link = (file) => `/directory/file/${file.split("/").map(encodeURIComponent).join("/")}?key=${encodeURIComponent(key)}`;
-  const tree = [...folders.entries()].map(([folder, folderFiles]) => `<section><h2>${folder === "." ? "Root" : folder}</h2><ul>${folderFiles.map((file) => `<li><a href="${link(file)}">${file.split("/").at(-1)}</a></li>`).join("")}</ul></section>`).join("");
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AFEON Books Files</title><style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#f8f5ef;color:#171717}section{background:#fff;border:1px solid #ddd;margin:16px 0;padding:16px}h1{margin-bottom:28px}h2{font-size:16px;margin-top:0}ul{list-style:none;padding:0;margin-bottom:0}li{padding:6px 0}a{color:#17624a;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><h1>AFEON Books deployed files</h1>${selectedFile ? `<p>Viewing <strong>${selectedFile}</strong></p>` : ""}${tree}</body></html>`;
+  const tree = [...folders.entries()].map(([folder, folderFiles]) => `<section><h2>${escapeHtml(folder === "." ? "Root" : folder)}</h2><ul>${folderFiles.map((file) => `<li><a href="${escapeHtml(link(file))}">${escapeHtml(file.split("/").at(-1))}</a></li>`).join("")}</ul></section>`).join("");
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AFEON Books Files</title><style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#f8f5ef;color:#171717}section{background:#fff;border:1px solid #ddd;margin:16px 0;padding:16px}h1{margin-bottom:28px}h2{font-size:16px;margin-top:0}ul{list-style:none;padding:0;margin-bottom:0}li{padding:6px 0}a{color:#17624a;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><h1>AFEON Books deployed files</h1>${selectedFile ? `<p>Viewing <strong>${escapeHtml(selectedFile)}</strong></p>` : ""}${tree}</body></html>`;
 }
 
 async function directoryResponseFor(request, env) {
@@ -256,12 +506,62 @@ async function directoryResponseFor(request, env) {
   return directoryResponse(404);
 }
 
-export default {
-  async fetch(request, env) {
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
     if (path === "/directory" || path === "/directory/" || path.startsWith("/directory/file/") || path === "/directory-manifest.json") return directoryResponseFor(request, env);
+
+if (url.hostname === "source.afeonbooks.com") {
+  if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+
+  const isSourceDashboardRoute = path === "/" || path === "/source" || path === "/source/" || path === "/infra" || path === "/infra/";
+  if (!isSourceDashboardRoute) {
+    return env.ASSETS.fetch(request);
+  }
+
+  const accessAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
+  if (!await validateAccessAssertion(accessAssertion)) {
+    return new Response("Cloudflare Access authorization is required.", {
+      status: 403,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
+  let user;
+  try {
+    user = await getAdminUserFromSession(request);
+  } catch (error) {
+    console.error(JSON.stringify({
+      message: "Source dashboard admin session check failed",
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    return protectedAccessResponse(sourceAuthError(503, "The session check failed. Please try again shortly."), accessAssertion);
+  }
+
+  if (!user) {
+    if (url.searchParams.get("authn_return") === "1") {
+      return protectedAccessResponse(sourceAuthError(401, "The sign-in returned without a staff session. Sign in with a staff or admin account, then try the dashboard again."), accessAssertion);
+    }
+
+    const authUrl = new URL("https://authn.afeonbooks.com/");
+    const returnTo = new URL(request.url);
+    returnTo.searchParams.set("authn_return", "1");
+    authUrl.searchParams.set("return_to", returnTo.toString());
+    return protectedAccessResponse(Response.redirect(authUrl.toString(), 302), accessAssertion);
+  }
+
+  if (user.user?.role !== "staff" && user.user?.role !== "admin") {
+    return protectedAccessResponse(sourceAuthError(403, "A staff or admin account is required to access this dashboard."), accessAssertion);
+  }
+
+  return protectedAccessResponse(new Response(sourceDashboardHtml(), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  }), accessAssertion);
+}
 
 if (url.hostname === "authn.afeonbooks.com") {
   if (path.startsWith("/api/")) {
@@ -270,7 +570,7 @@ if (url.hostname === "authn.afeonbooks.com") {
   }
 
   if (path === "/" || path === "/account" || path === "/account/" || /^\/(?:sign-in|account-check)\/[a-f0-9]{32}$/.test(path)) {
-    return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+    return env.ASSETS.fetch(new Request(new URL("/", request.url), request));
   }
 
   return env.ASSETS.fetch(request);
@@ -281,7 +581,24 @@ if (url.hostname === "authn.afeonbooks.com") {
       return fetch(new Request(apiUrl, request));
     }
 
+    const isAdminRoute =
+      path === "/admin" ||
+      path.startsWith("/admin/");
+    const isMailSystem = url.hostname === "mailsystem.afeonbooks.com";
+    let accessAssertion;
+    if (isAdminRoute || isMailSystem) {
+      accessAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
+      if (!await validateAccessAssertion(accessAssertion)) {
+        return new Response("Cloudflare Access authorization is required.", {
+          status: 403,
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
+    }
+
     if (
+      !isMailSystem &&
+      !isAdminRoute &&
       request.method === "GET" &&
       request.headers.get("Accept")?.includes("text/html") &&
       await isMaintenanceMode()
@@ -300,35 +617,51 @@ if (url.hostname === "authn.afeonbooks.com") {
     const orderPdfMatch = path.match(/^\/order\/([^/]+)\/pdf\/?$/);
     if (orderPdfMatch) return orderPdfResponse(request, orderPdfMatch[1]);
 
-    const fetchAdminIndex = () => env.ASSETS.fetch(new Request(new URL("/admin/index.html", request.url), request));
-    const fetchAdminPos = () => env.ASSETS.fetch(new Request(new URL("/admin/pos.html", request.url), request));
+    const fetchSiteIndex = () => env.ASSETS.fetch(new Request(new URL("/", request.url), request));
+    const fetchAdminIndex = () => env.ASSETS.fetch(new Request(new URL("/admin/", request.url), request));
+    const fetchAdminPos = () => env.ASSETS.fetch(new Request(new URL("/admin/pos", request.url), request));
 
-    if (path === "/admin/admin" || path === "/admin/admin/") return Response.redirect(new URL("/admin/", request.url), 301);
-    if (path.startsWith("/admin/admin/")) return Response.redirect(new URL(path.replace(/^\/admin\/admin/, "/admin"), request.url), 301);
-    if (path === "/admin/pos" || path === "/admin/pos/") return fetchAdminPos();
-    if (path === "/admin/zoho-mail" || path === "/admin/zoho-mail/") return fetchAdminIndex();
-    if (path === "/admin" || path === "/admin/" || (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."))) return fetchAdminIndex();
+    if (path === "/admin/admin" || path === "/admin/admin/") return protectedAccessResponse(Response.redirect(new URL("/admin/", request.url), 301), accessAssertion);
+    if (path.startsWith("/admin/admin/")) return protectedAccessResponse(Response.redirect(new URL(path.replace(/^\/admin\/admin/, "/admin"), request.url), 301), accessAssertion);
+    if (path === "/admin/pos" || path === "/admin/pos/") return protectedAccessResponse(await fetchAdminPos(), accessAssertion);
+    if (path === "/admin/zoho-mail" || path === "/admin/zoho-mail/") return protectedAccessResponse(await fetchAdminIndex(), accessAssertion);
+    if (path === "/admin" || path === "/admin/" || (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."))) return protectedAccessResponse(await fetchAdminIndex(), accessAssertion);
 
-    const fetchPickupIndex = () => env.ASSETS.fetch(new Request(new URL("/pickup/index.html", request.url), request));
+    const fetchPickupIndex = () => env.ASSETS.fetch(new Request(new URL("/pickup/", request.url), request));
     if (path === "/pickup" || path === "/pickup/" || (path.startsWith("/pickup/") && !path.split("/").pop()?.includes("."))) return fetchPickupIndex();
 
     if (/^\/order\/[^/]+\/?$/.test(path)) {
-      return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+      return fetchSiteIndex();
     }
 
     if (path === "/account" || path === "/account/" || /^\/(?:sign-in|account-check)\/[a-f0-9]{32}$/.test(path)) {
-      return env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+      return fetchSiteIndex();
     }
 
     const assetResponse = await env.ASSETS.fetch(request);
+    if ((isAdminRoute || isMailSystem) && assetResponse.status !== 404) return protectedAccessResponse(assetResponse, accessAssertion);
     if (assetResponse.status !== 404) return assetResponse;
     if (!path.split("/").pop()?.includes(".")) {
-      const notFoundPage = await env.ASSETS.fetch(new Request(new URL("/index.html", request.url), request));
+      const notFoundPage = await fetchSiteIndex();
       return new Response(notFoundPage.body, {
         status: 200,
         headers: notFoundPage.headers,
       });
     }
     return new Response("Not Found", { status: 404 });
+}
+
+export default {
+  async fetch(request, env) {
+    try {
+      const response = await handleRequest(request, env);
+      if (response.status === 502 || response.status === 503) {
+        return addSecurityHeaders(maintenanceResponse());
+      }
+      return addSecurityHeaders(response);
+    } catch (error) {
+      console.error("Worker request failed; serving maintenance page", error);
+      return addSecurityHeaders(maintenanceResponse());
+    }
   },
 };

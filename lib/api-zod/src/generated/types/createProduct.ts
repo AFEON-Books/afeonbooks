@@ -22,4 +22,5 @@ export interface CreateProduct {
   stock: number;
   active: boolean;
   showInShop?: boolean;
+  sortOrder?: number;
 }

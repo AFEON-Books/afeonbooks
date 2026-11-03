@@ -5,6 +5,7 @@ import { renderEmailHtml, sendEmail, applyVars, buildVars } from "../lib/email";
 import { logger } from "../lib/logger";
 import { requireRole, requireUser } from "../lib/auth";
 import { getOrCreateContent } from "./content";
+import { createOrderAccessToken } from "../lib/order-access";
 
 const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || "https://afeonbooks.com").trim().replace(/\/+$/, "");
 const router: IRouter = Router();
@@ -43,7 +44,8 @@ router.post("/orders/:id/resend-email", requireUser, requireRole("staff", "admin
       return;
     }
 
-    const orderUrl = `${PUBLIC_SITE_URL}/order/${order.id}`;
+    const accessToken = await createOrderAccessToken(order.id);
+    const orderUrl = `${PUBLIC_SITE_URL}/order/${order.id}${accessToken ? `#access_token=${encodeURIComponent(accessToken)}` : ""}`;
     const vars = buildVars({ content, order, orderUrl });
     const subject = applyVars(content.emailSubject, vars);
     const html = renderEmailHtml({ content, order, items, orderUrl });
@@ -57,7 +59,7 @@ router.post("/orders/:id/resend-email", requireUser, requireRole("staff", "admin
       html,
     });
 
-    logger.info({ orderId: order.id, emailId: result.id, orderUrl }, "order confirmation email resent via Zoho Mail");
+    logger.info({ orderId: order.id, emailId: result.id }, "order confirmation email resent via Zoho Mail");
     res.json({ ok: true, message: `Email resent to ${order.customerEmail}`, emailId: result.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -1,2 +1,17 @@
 **/pickup/source/zipFile.zip
 pickup/source/zipFile.zip
+**/pickup/source/.env*
+**/pickup/source/*backup*
+**/pickup/source/*production-export*
+**/pickup/source/*.csv
+**/pickup/source/*.db
+**/pickup/source/*.dump
+**/pickup/source/*.key
+**/pickup/source/*.pem
+**/pickup/source/*.p12
+**/pickup/source/*.pfx
+**/pickup/source/*.sqlite
+**/pickup/source/*.sqlite3
+**/pickup/source/*.xls
+**/pickup/source/*.xlsx
+**/pickup/source/**/*.sql

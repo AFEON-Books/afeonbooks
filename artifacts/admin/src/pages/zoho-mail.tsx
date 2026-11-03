@@ -9,7 +9,6 @@ const REQUIRED_ENV = [
 
 export default function ZohoMail() {
   const [copied, setCopied] = useState<string | null>(null);
-  const [adminPin, setAdminPin] = useState("");
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<{ ok?: boolean; message?: string; authenticatedUser?: string; fromAddress?: string; accountIdConfigured?: boolean; tokenRefreshSucceeded?: boolean } | null>(null);
 
@@ -22,17 +21,12 @@ export default function ZohoMail() {
   };
 
   const checkZoho = async () => {
-    if (!/^\d{4}$/.test(adminPin)) {
-      setStatus({ ok: false, message: "Enter the 4-digit admin PIN to run the server-side Zoho check." });
-      return;
-    }
     setChecking(true);
     setStatus(null);
     try {
       const response = await fetch("/api/email/zoho-diagnostic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: adminPin }),
       });
       const data = await response.json().catch(() => ({}));
       setStatus(data);
@@ -101,18 +95,9 @@ export default function ZohoMail() {
 
         <section className="bg-white border border-black/5 shadow-sm p-8">
           <h2 className="text-xl font-bold border-b border-black/10 pb-4">Server-side connection check</h2>
-          <p className="text-sm text-black/50 mt-3">This refreshes the Zoho OAuth access token without sending an email.</p>
+          <p className="text-sm text-black/50 mt-3">This refreshes the Zoho OAuth access token without sending an email. Access requires an AFEON staff or admin account and Cloudflare Access approval.</p>
           <div className="flex flex-col md:flex-row gap-3 mt-5 max-w-xl">
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={adminPin}
-              onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="4-digit admin PIN"
-              className="h-11 border border-black/20 bg-white px-3 font-mono tracking-[0.5em] rounded-none"
-            />
-            <button type="button" onClick={checkZoho} disabled={checking || adminPin.length !== 4} className="h-11 px-5 bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-40">
+            <button type="button" onClick={checkZoho} disabled={checking} className="h-11 px-5 bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-40">
               {checking ? "Checking…" : "Check Zoho"}
             </button>
           </div>

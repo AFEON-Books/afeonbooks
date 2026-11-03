@@ -24,7 +24,6 @@ export const siteContentTable = pgTable("site_content", {
   defaultShippingCountry: text("default_shipping_country").notNull().default(""),
   shippingAddresses: text("shipping_addresses").notNull().default("[]"),
   loyaltyPagesPerDollar: text("loyalty_pages_per_dollar").notNull().default("50"),
-  adminPin: text("admin_pin").notNull().default("2026"),
   ordersEnabled: text("orders_enabled").notNull().default("true"),
   maintenanceMode: text("maintenance_mode").notNull().default("false"),
   emailEnabled: text("email_enabled").notNull().default("false"),

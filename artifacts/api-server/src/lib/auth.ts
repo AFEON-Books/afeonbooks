@@ -3,6 +3,8 @@ import { promisify } from "node:util";
 import type { NextFunction, Request, Response } from "express";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { authTokensTable, db, sessionsTable, usersTable, zohoMailConnectionsTable, type UserRow } from "@workspace/db";
+import { logger } from "./logger";
+import { verifyCloudflareAccessAssertion } from "./cloudflare-access";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "afeonbooks_session";
@@ -150,12 +152,47 @@ export async function requireUser(request: Request, response: Response, next: Ne
   next();
 }
 
-export function requireRole(...roles: string[]) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    if (!request.user || !roles.includes(request.user.role ?? "customer")) {
-      response.status(403).json({ error: "You do not have permission to perform this action" });
-      return;
+async function authorizeStaffIdentity(request: Request, response: Response, roles: string[]): Promise<boolean> {
+  if (!request.user || !roles.includes(request.user.role ?? "customer")) {
+    response.status(403).json({ error: "You do not have permission to perform this action" });
+    return false;
+  }
+  if (!IS_PRODUCTION) return true;
+
+  try {
+    const claims = await verifyCloudflareAccessAssertion(request);
+    if (typeof claims?.email !== "string" || normalizeEmail(claims.email) !== normalizeEmail(request.user.email) || !request.user.emailVerifiedAt) {
+      response.status(403).json({ error: "Cloudflare Access identity does not match the signed-in staff account" });
+      return false;
     }
+    const assertion = request.get("cf-access-jwt-assertion") ?? request.cookies?.afeonbooks_access;
+    if (assertion) {
+      response.cookie("afeonbooks_access", assertion, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        domain: SESSION_COOKIE_DOMAIN,
+        maxAge: 15 * 60 * 1000,
+        path: "/",
+      });
+    }
+    return true;
+  } catch (error) {
+    logger.warn({ err: error, userId: request.user.id }, "Cloudflare Access authorization failed");
+    response.status(403).json({ error: "Cloudflare Access authorization is required" });
+    return false;
+  }
+}
+
+export function requireStaffAccess(...roles: string[]) {
+  return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    if (await authorizeStaffIdentity(request, response, roles)) next();
+  };
+}
+
+export function requireRole(...roles: string[]) {
+  return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    if (!await authorizeStaffIdentity(request, response, roles)) return;
     next();
   };
 }

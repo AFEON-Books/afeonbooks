@@ -10,7 +10,7 @@ const router: IRouter = Router();
 const ZOHO_SCOPE = "ZohoMail.messages.CREATE,ZohoMail.accounts.READ";
 const ZOHO_DEFAULT_REDIRECT_URI = "https://api.afeonbooks.com/api/email/zoho-callback";
 
-router.get("/email/zoho-authorize", (req, res): void => {
+router.get("/email/zoho-authorize", requireUser, requireRole("admin"), (req, res): void => {
   const clientId = process.env.ZOHO_CLIENT_ID;
   if (!clientId) {
     res.status(503).send("ZOHO_CLIENT_ID is not configured on the API server.");
@@ -28,7 +28,7 @@ router.get("/email/zoho-authorize", (req, res): void => {
   res.redirect(authUrl.toString());
 });
 
-router.get("/email/zoho-callback", async (req, res): Promise<void> => {
+router.get("/email/zoho-callback", requireUser, requireRole("admin"), async (req, res): Promise<void> => {
   const error = typeof req.query.error === "string" ? req.query.error : "";
   if (error) {
     res.status(400).type("text/plain").send(`Zoho authorization failed: ${error}`);
@@ -173,6 +173,7 @@ router.post("/email/test", requireUser, requireRole("admin"), async (req, res): 
     utmContent: null,
     referrer: null,
     landingPage: null,
+    guestAccessRevokedAt: null,
     paymentMethod: "cash_on_delivery",
     status: "pending",
     estimatedDeliveryDate: null,
@@ -219,17 +220,6 @@ router.post("/email/test", requireUser, requireRole("admin"), async (req, res): 
 // Diagnostic only: validates the configured Zoho Mail OAuth credentials and account.
 router.post("/email/zoho-diagnostic", requireUser, requireRole("admin"), async (req, res): Promise<void> => {
   try {
-    const { pin } = (req.body ?? {}) as { pin?: unknown };
-    if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
-      res.status(400).json({ ok: false, message: "A valid 4-digit admin PIN is required." });
-      return;
-    }
-    const content = await getOrCreateContent();
-    if (content.adminPin !== pin) {
-      res.status(403).json({ ok: false, message: "Invalid admin PIN." });
-      return;
-    }
-
     const configured = Boolean(
       process.env.ZOHO_MAIL_REFRESH_TOKEN &&
       process.env.ZOHO_CLIENT_ID &&
