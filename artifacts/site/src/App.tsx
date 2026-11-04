@@ -60,46 +60,52 @@ function Router() {
 
 function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  const [status, setStatus] = useState<"loading" | "denied" | "allowed">("loading");
+  const [status, setStatus] = useState<"loading" | "signed-out" | "account-required" | "github-required" | "allowed">("loading");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (loading) return;
-    if (!user || (user.role !== "staff" && user.role !== "admin")) {
-      setStatus("denied");
+    if (!user) {
+      setStatus("signed-out");
+      return;
+    }
+    if (user.role !== "staff" && user.role !== "admin") {
+      setStatus("account-required");
       return;
     }
     let cancelled = false;
     fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
         const data = await response.json().catch(() => ({})) as { user?: { role?: string }; error?: string };
+        if (response.status === 403) {
+          if (!cancelled) setError(data.error ?? "");
+          if (!cancelled) setStatus("github-required");
+          return;
+        }
         if (!response.ok) throw new Error(data.error ?? "Unable to verify mailbox access");
-        if (!cancelled) setStatus(data.user?.role === "staff" || data.user?.role === "admin" ? "allowed" : "denied");
+        if (!cancelled) setStatus(data.user?.role === "staff" || data.user?.role === "admin" ? "allowed" : "account-required");
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
         setError(cause instanceof Error ? cause.message : "Unable to verify mailbox access");
-        setStatus("denied");
+        setStatus("github-required");
       });
     return () => { cancelled = true; };
   }, [loading, user]);
 
   if (status === "allowed") return <>{children}</>;
   if (status === "loading" || loading) return <main className="flex min-h-screen items-center justify-center">Checking mailbox access…</main>;
-  if (status === "denied") {
-    const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
-    signInUrl.searchParams.set("return_to", window.location.href);
-    return (
-      <main className="flex min-h-screen items-center justify-center px-6 text-center">
-        <div className="max-w-md">
-          <h1 className="text-xl font-semibold">Staff mailbox access required</h1>
-          <p className="mt-2 text-sm text-black/60">{error || "Sign in with a GitHub account that belongs to AFEON-Books and is linked to a verified AFEON staff or admin account."}</p>
-          <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>Continue with GitHub</a>
-        </div>
-      </main>
-    );
-  }
-  return <>{children}</>;
+  const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
+  signInUrl.searchParams.set("return_to", window.location.href);
+  return (
+    <main className="flex min-h-screen items-center justify-center px-6 text-center">
+      <div className="max-w-md">
+        <h1 className="text-xl font-semibold">Staff mailbox access required</h1>
+        <p className="mt-2 text-sm text-black/60">{status === "github-required" ? error || "Use the GitHub username linked to an AFEON Books staff or admin account." : status === "account-required" ? "Sign in with a GitHub account linked to an AFEON Books account that has the staff or admin role." : "Continue with the GitHub username linked to your AFEON Books staff or admin account."}</p>
+        {(status === "signed-out" || status === "github-required") && <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>{status === "signed-out" ? "Sign in with GitHub" : "Continue with GitHub"}</a>}
+      </div>
+    </main>
+  );
 }
 
 function useImageProtection() {

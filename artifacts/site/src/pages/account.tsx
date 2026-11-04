@@ -49,7 +49,7 @@ function getAllowedReturnUrl(value: string | null): string | null {
 }
 
 function AccountForm() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, user } = useAuth();
   const [step, setStep] = useState<"email" | "code" | "password" | "signup" | "forgot" | "verification">("email");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -153,7 +153,7 @@ function AccountForm() {
 
       {step === "email" ? (
         <a href={`https://afeonbooks.com/api/auth/github/start?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`} className="block w-full border border-black/20 bg-white px-4 py-4 text-center text-xs font-bold uppercase tracking-widest hover:bg-black/[0.03]">
-          Staff and admin: continue with GitHub
+          {user?.role === "staff" || user?.role === "admin" ? "Continue with GitHub" : "Sign in with GitHub"}
         </a>
       ) : null}
       {step === "code" && <button type="button" onClick={() => { setStep("password"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Login with Password</button>}

@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
-import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
+import { authRateLimitsTable, authTokensTable, db, githubAccountLinksTable, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
   createAuthToken,
@@ -9,6 +9,7 @@ import {
   destroySession,
   hashPassword,
   loadUser,
+  markSessionGithubOrganizationVerified,
   normalizeEmail,
   publicUser,
   requireRole,
@@ -64,6 +65,10 @@ function allowedAdminReturnUrl(value: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isStaffOrAdmin(user: { role: string | null } | undefined): boolean {
+  return user?.role === "staff" || user?.role === "admin";
 }
 
 function githubFailure(response: Response, status: number, message: string): void {
@@ -186,17 +191,17 @@ async function sendAuthEmail(to: string, subject: string, html: string): Promise
 const router: IRouter = Router();
 
 router.get("/auth/github/start", async (req, res): Promise<void> => {
+  const requestedReturnUrl = typeof req.query.return_to === "string" ? req.query.return_to : undefined;
+  const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
+  if (!returnUrl) {
+    res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
+    return;
+  }
   try {
     githubOAuthCredentials();
   } catch (error) {
     logger.error({ err: error }, "GitHub OAuth is not configured");
     githubFailure(res, 503, "GitHub sign-in is not configured.");
-    return;
-  }
-  const requestedReturnUrl = typeof req.query.return_to === "string" ? req.query.return_to : undefined;
-  const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
-  if (!returnUrl) {
-    res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
     return;
   }
   res.set({
@@ -207,14 +212,14 @@ router.get("/auth/github/start", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/github/start", async (req, res): Promise<void> => {
-  if (!await verifyTurnstileToken(req.body?.["cf-turnstile-response"], GITHUB_TURNSTILE_ACTION)) {
-    githubFailure(res, 403, "Turnstile verification failed. The token may have expired, or its hostname/action may not match the site settings. Refresh and try again.");
-    return;
-  }
   const requestedReturnUrl = typeof req.body?.return_to === "string" ? req.body.return_to : undefined;
   const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
   if (!returnUrl) {
     res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
+    return;
+  }
+  if (!await verifyTurnstileToken(req.body?.["cf-turnstile-response"], GITHUB_TURNSTILE_ACTION)) {
+    githubFailure(res, 403, "Turnstile verification failed. The token may have expired, or its hostname/action may not match the site settings. Refresh and try again.");
     return;
   }
   let credentials: ReturnType<typeof githubOAuthCredentials>;
@@ -337,26 +342,69 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
     githubFailure(res, 403, `Your GitHub account must be an active member of the ${GITHUB_ORGANIZATION} organization.`);
     return;
   }
-  const githubIdentityEmail = `github-${githubUser.id}@github.afeonbooks.invalid`;
-  const [user] = await db.insert(usersTable).values({
-    email: githubIdentityEmail,
-    passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
-    name: githubUser.login,
-    role: "staff",
-  }).onConflictDoUpdate({
-    target: usersTable.email,
-    set: {
-      name: githubUser.login,
-      role: "staff",
-    },
-  }).returning();
-  if (!user) {
-    githubFailure(res, 500, "Unable to create your GitHub staff session. Please try again.");
+
+  const githubAccounts = await db.select({
+    linkId: githubAccountLinksTable.id,
+    githubUserId: githubAccountLinksTable.githubUserId,
+    user: usersTable,
+  })
+    .from(githubAccountLinksTable)
+    .innerJoin(usersTable, eq(usersTable.id, githubAccountLinksTable.userId))
+    .where(or(
+      eq(githubAccountLinksTable.githubUserId, String(githubUser.id)),
+      sql`lower(${githubAccountLinksTable.githubUsername}) = ${githubUser.login.toLowerCase()}`,
+    ))
+    .limit(2);
+  if (githubAccounts.length !== 1) {
+    if (githubAccounts.length > 1) {
+      githubFailure(res, 403, "This GitHub identity matches conflicting AFEON account links. Ask an administrator to review the account-link table.");
+      return;
+    }
+    githubFailure(res, 403, "This GitHub account is not linked to an AFEON Books account. Ask an administrator to add the GitHub username to the account-link table.");
+    return;
+  }
+  const githubAccount = githubAccounts[0]!;
+  if (githubAccount.githubUserId && githubAccount.githubUserId !== String(githubUser.id)) {
+    githubFailure(res, 403, "This GitHub username is linked to a different GitHub identity. Ask an administrator to review the account link.");
+    return;
+  }
+  if (!isStaffOrAdmin(githubAccount.user) || !githubAccount.user.emailVerifiedAt) {
+    githubFailure(res, 403, "The linked AFEON Books account must have a verified email and the staff or admin role.");
     return;
   }
 
-  await destroySession(req, res);
-  await createSession(user.id, req, res, String(githubUser.id));
+  const currentUser = await loadUser(req);
+  if (currentUser && currentUser.id !== githubAccount.user.id) {
+    githubFailure(res, 403, "This GitHub account is linked to a different AFEON Books account. Your current account is still signed in.");
+    return;
+  }
+
+  const boundLink = await db.transaction(async (tx) => {
+    const [link] = await tx.select()
+      .from(githubAccountLinksTable)
+      .where(eq(githubAccountLinksTable.id, githubAccount.linkId))
+      .for("update")
+      .limit(1);
+    if (!link || (link.githubUserId && link.githubUserId !== String(githubUser.id))) return false;
+    await tx.update(githubAccountLinksTable)
+      .set({ githubUsername: githubUser.login, githubUserId: String(githubUser.id) })
+      .where(eq(githubAccountLinksTable.id, githubAccount.linkId));
+    return true;
+  });
+  if (!boundLink) {
+    githubFailure(res, 403, "This GitHub account is already linked to a different GitHub identity. Ask an administrator to review the account link.");
+    return;
+  }
+
+  if (currentUser) {
+    req.user = currentUser;
+    if (!await markSessionGithubOrganizationVerified(req, String(githubUser.id))) {
+      githubFailure(res, 401, "Your AFEON Books session expired. Sign in again and retry GitHub sign-in.");
+      return;
+    }
+  } else {
+    await createSession(githubAccount.user.id, req, res, String(githubUser.id));
+  }
   res.set("Cache-Control", "no-store").redirect(303, returnUrl);
 });
 

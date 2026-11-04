@@ -84,6 +84,19 @@ Before deploying the staff authentication changes, apply [`lib/db/migrations/000
 
 Apply [`lib/db/migrations/0006_email_branding.sql`](./lib/db/migrations/0006_email_branding.sql) to update existing email templates that still use the previous default accent color.
 
+Before deploying mapped GitHub sign-in, apply [`lib/db/migrations/0007_github_account_links.sql`](./lib/db/migrations/0007_github_account_links.sql). Then manually link each permitted GitHub username to an existing verified AFEON staff/admin account in the same production database:
+
+```sql
+INSERT INTO github_account_links (github_username, user_id)
+SELECT 'github-username', id
+FROM users
+WHERE lower(email) = lower('staff@example.com')
+  AND role IN ('staff', 'admin')
+  AND email_verified_at IS NOT NULL;
+```
+
+Replace both example values. Check that the insert affected exactly one row. The first successful OAuth sign-in binds the immutable GitHub user ID to that username; future sign-ins use the ID, so a renamed or reassigned username cannot take over the link. Each AFEON account and GitHub identity can be linked only once.
+
 ## Production API
 
 The canonical API origin is:
@@ -96,7 +109,7 @@ The production Cloudflare Worker forwards `/api/*` requests from the main site t
 
 ## Private Mail System
 
-The mailbox app is served at `https://mailsystem.afeonbooks.com` by the Cloudflare Worker. Direct GitHub OAuth requires active membership in the configured GitHub organization; it does not require a matching AFEON email or pre-existing staff role. Each organization member signs in to Zoho and authorizes the mailbox from their own session; credentials are encrypted in PostgreSQL and bound to that person's session. Locking or signing out deletes that session's stored credential.
+The mailbox app is served at `https://mailsystem.afeonbooks.com` by the Cloudflare Worker. Access requires an active GitHub organization membership and a manual GitHub-username mapping to an existing verified AFEON staff/admin account. Each organization member signs in to Zoho and authorizes the mailbox from their own session; credentials are encrypted in PostgreSQL and bound to that person's session. Locking or signing out deletes that session's stored credential.
 
 Use `ZOHO_MAILBOX_` variables for mailbox OAuth and configuration; `ZOHO_` variables without that prefix remain for transactional email sending. Existing deployments can continue using the previous names as fallbacks, but should migrate to the mailbox-prefixed names.
 
@@ -117,9 +130,9 @@ Admin, mailbox, and source dashboard access use GitHub OAuth directly; Cloudflar
 - **Homepage URL:** `https://afeonbooks.com`
 - **Authorization callback URL:** `https://api.afeonbooks.com/api/auth/github/callback`
 
-Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user` and `read:org`; active organization membership is the sole GitHub sign-in eligibility check and does not depend on the GitHub email matching an AFEON account. Members are provisioned as staff identities keyed by GitHub user ID; organization membership does not grant AFEON admin privileges. Removing someone from the organization prevents future sign-ins, while existing sessions remain valid until they expire. Staff/admin APIs require a session created by this GitHub flow, not a password-only customer session. The GitHub sign-in start page also requires Turnstile (`staff_github_login` action). Its challenge is served on `afeonbooks.com`, so add the exact hostname `afeonbooks.com` to both the Turnstile widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostname, no scheme or wildcard). Keep the customer sign-in hostnames used by the existing email flow in those lists too.
+Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user` and `read:org`. To sign in, the GitHub username must have an entry in `github_account_links` pointing to an existing verified AFEON staff/admin account, and the GitHub identity must be an active member of the configured organization. No match means sign-in is denied; organization membership alone never grants an AFEON role. The callback creates a session for the mapped account if none is signed in, or preserves and verifies the current session when it belongs to that same account. It will not switch an already signed-in user to a different mapped account. The first successful sign-in binds the immutable GitHub user ID to the manually entered username. Removing someone from the organization prevents new sign-ins, while existing sessions remain valid until they expire. Staff/admin APIs require a session created or verified by this GitHub flow. The GitHub sign-in start page also requires Turnstile (`staff_github_login` action). Its challenge is served on `afeonbooks.com`, so add the exact hostname `afeonbooks.com` to both the Turnstile widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostname, no scheme or wildcard). Keep the customer sign-in hostnames used by the existing email flow in those lists too.
 
-Apply migrations 0003, 0004, and 0005 before deploying the API. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
+Apply migrations 0003 through 0007 in sequence if they have not already been applied. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
 
 Set `MAINTENANCE_KEY` as a secret environment variable on the API service. Direct maintenance toggles use `https://api.afeonbooks.com/api/maintenance/off?key=<MAINTENANCE_KEY>` or `/api/maintenance/on?key=<MAINTENANCE_KEY>`. Choose a long random value and do not commit it or share the full URL; the key is required and there is no default.
 

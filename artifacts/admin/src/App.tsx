@@ -513,7 +513,7 @@ function StatusEditRedirect() {
 }
 
 function AdminAccessGate({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<"loading" | "signed-out" | "denied" | "allowed">("loading");
+  const [status, setStatus] = useState<"loading" | "signed-out" | "account-required" | "github-required" | "allowed">("loading");
   const [error, setError] = useState("");
   const [turnstileOpen, setTurnstileOpen] = useState(false);
   const [githubTargetName, setGithubTargetName] = useState("");
@@ -522,25 +522,32 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
+    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        const data = await response.json().catch(() => ({})) as { error?: string };
-        if (response.status === 401) {
+        const data = await response.json().catch(() => ({})) as { user?: { role?: string } | null; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "Unable to check your AFEON Books account");
+        if (!data.user) {
           if (!cancelled) setStatus("signed-out");
           return;
         }
-        if (response.status === 403) {
-          if (!cancelled) setError(data.error ?? "");
-          if (!cancelled) setStatus("denied");
+        if (data.user.role !== "staff" && data.user.role !== "admin") {
+          if (!cancelled) setStatus("account-required");
           return;
         }
-        if (!response.ok) throw new Error(data.error ?? "Unable to verify staff access");
+        const accessResponse = await fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" });
+        const accessData = await accessResponse.json().catch(() => ({})) as { error?: string };
+        if (accessResponse.status === 403) {
+          if (!cancelled) setError(accessData.error ?? "");
+          if (!cancelled) setStatus("github-required");
+          return;
+        }
+        if (!accessResponse.ok) throw new Error(accessData.error ?? "Unable to verify staff access");
         if (!cancelled) setStatus("allowed");
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : "Unable to verify staff access");
-          setStatus("denied");
+          setStatus("account-required");
         }
       });
     return () => { cancelled = true; };
@@ -579,17 +586,17 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
-  if (status === "signed-out" || status === "denied") {
+  if (status !== "allowed") {
     return (
       <>
         <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
           <div className="w-full max-w-sm">
-          <h1 className="text-xl font-semibold">{status === "denied" ? "Staff access required" : "Staff sign-in"}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{status === "denied" ? error || "An active GitHub organization sign-in is required." : "Use a GitHub account that belongs to the AFEON Books organization."}</p>
-          <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
+          <h1 className="text-xl font-semibold">{status === "github-required" || status === "signed-out" ? "Sign in with GitHub" : "Staff account required"}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{status === "github-required" ? error || "Your GitHub account must be linked to an AFEON Books staff or admin account and belong to the organization." : status === "account-required" ? "Sign in with a GitHub account linked to an AFEON Books account that has the staff or admin role." : "Continue with the GitHub username linked to your AFEON Books staff or admin account."}</p>
+          {(status === "github-required" || status === "signed-out") && <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
             <Github aria-hidden="true" size={20} />
-            Sign in with GitHub
-          </button>
+            {status === "signed-out" ? "Sign in with GitHub" : "Continue with GitHub"}
+          </button>}
           {popupError && <p role="alert" className="mt-3 text-sm text-destructive">{popupError}</p>}
           </div>
         </main>

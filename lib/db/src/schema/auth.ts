@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -17,6 +18,18 @@ export const sessionsTable = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   githubUserId: text("github_user_id"),
 });
+
+export const githubAccountLinksTable = pgTable("github_account_links", {
+  id: serial("id").primaryKey(),
+  githubUsername: text("github_username").notNull(),
+  githubUserId: text("github_user_id"),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("github_account_links_username_unique").on(sql`lower(${table.githubUsername})`),
+  uniqueIndex("github_account_links_github_user_id_unique").on(table.githubUserId),
+  uniqueIndex("github_account_links_user_id_unique").on(table.userId),
+]);
 
 export const loyaltyTransactionsTable = pgTable("loyalty_transactions", {
   id: serial("id").primaryKey(),

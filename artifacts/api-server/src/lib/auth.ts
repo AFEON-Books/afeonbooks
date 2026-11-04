@@ -139,7 +139,23 @@ export async function loadUser(request: Request): Promise<UserRow | undefined> {
     .innerJoin(usersTable, eq(usersTable.id, sessionsTable.userId))
     .where(and(eq(sessionsTable.tokenHash, hashSessionToken(token)), gt(sessionsTable.expiresAt, new Date())))
     .limit(1);
-  return rows[0]?.user;
+  const user = rows[0]?.user;
+  if (user?.email.endsWith("@github.afeonbooks.invalid")) return undefined;
+  return user;
+}
+
+export async function markSessionGithubOrganizationVerified(request: Request, githubUserId: string): Promise<boolean> {
+  const token = request.cookies?.[SESSION_COOKIE];
+  if (!token || !request.user) return false;
+  const [session] = await db.update(sessionsTable)
+    .set({ githubUserId })
+    .where(and(
+      eq(sessionsTable.tokenHash, hashSessionToken(token)),
+      eq(sessionsTable.userId, request.user.id),
+      gt(sessionsTable.expiresAt, new Date()),
+    ))
+    .returning({ userId: sessionsTable.userId });
+  return session?.userId === request.user.id;
 }
 
 export async function requireUser(request: Request, response: Response, next: NextFunction): Promise<void> {

@@ -129,6 +129,19 @@ async function ensureAuthTables() {
     );
     ALTER TABLE sessions ADD COLUMN IF NOT EXISTS github_user_id text;
     CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
+    CREATE TABLE IF NOT EXISTS github_account_links (
+      id serial PRIMARY KEY,
+      github_username text NOT NULL,
+      github_user_id text,
+      user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS github_account_links_username_unique
+      ON github_account_links (lower(github_username));
+    CREATE UNIQUE INDEX IF NOT EXISTS github_account_links_github_user_id_unique
+      ON github_account_links (github_user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS github_account_links_user_id_unique
+      ON github_account_links (user_id);
     CREATE TABLE IF NOT EXISTS auth_tokens (
       id serial PRIMARY KEY,
       user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
