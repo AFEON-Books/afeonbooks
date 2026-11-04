@@ -82,6 +82,8 @@ Before deploying the guest-order privacy changes, apply [`lib/db/migrations/0002
 
 Before deploying the staff authentication changes, apply [`lib/db/migrations/0003_staff_authentication.sql`](./lib/db/migrations/0003_staff_authentication.sql) to add one-time-code attempt tracking and remove the insecure shared `site_content.admin_pin`. Apply [`lib/db/migrations/0004_remove_staff_pins.sql`](./lib/db/migrations/0004_remove_staff_pins.sql) to remove deprecated PIN data and [`lib/db/migrations/0005_github_staff_authentication.sql`](./lib/db/migrations/0005_github_staff_authentication.sql) to require GitHub-authenticated staff sessions.
 
+Apply [`lib/db/migrations/0006_email_branding.sql`](./lib/db/migrations/0006_email_branding.sql) to update existing email templates that still use the previous default accent color.
+
 ## Production API
 
 The canonical API origin is:

@@ -16,7 +16,7 @@ import {
   requireUser,
   verifyPassword,
 } from "../lib/auth";
-import { sendEmail } from "../lib/email";
+import { renderBrandedEmail, sendEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 import { verifyTurnstileToken } from "../lib/turnstile";
 
@@ -27,7 +27,6 @@ const GITHUB_ORGANIZATION = process.env.GITHUB_OAUTH_ORGANIZATION || "AFEON-Book
 const GITHUB_CALLBACK_URL = process.env.GITHUB_OAUTH_CALLBACK_URL || "https://api.afeonbooks.com/api/auth/github/callback";
 const GITHUB_STATE_COOKIE = "afeonbooks_github_state";
 const GITHUB_RETURN_COOKIE = "afeonbooks_github_return";
-const GITHUB_POPUP_COOKIE = "afeonbooks_github_popup";
 const GITHUB_TURNSTILE_ACTION = "staff_github_login";
 const TURNSTILE_SITE_KEY = "0x4AAAAAAFY8DMwA2P5bWehZ";
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
@@ -80,10 +79,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function githubOAuthChallengePage(returnUrl: string, popup: boolean, nonce: string): string {
-  if (popup) {
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>AFEON Books | Staff sign-in</title><style>*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{display:grid;place-items:center;padding:24px;background:#f5f5f4;color:#171717;font:15px/1.5 system-ui,sans-serif}main{width:min(100%,420px);padding:30px;background:#fff;border:1px solid #e5e5e5}.brand{margin-bottom:20px;font-size:12px;font-weight:700;letter-spacing:.08em}h1{margin:0;font-size:23px;line-height:1.2}p{margin:10px 0 22px;color:#575757}.cf-turnstile{min-height:65px}button{display:flex;width:100%;height:44px;align-items:center;justify-content:center;gap:10px;margin-top:12px;border:0;border-radius:4px;background:#24292f;color:#fff;font-size:14px;font-weight:600;cursor:pointer}button:disabled{background:#92969a;cursor:not-allowed}button img{width:18px;height:18px;filter:invert(1)}</style></head><body><main><div class="brand">AFEON BOOKS</div><h1>Authentication Required</h1><p>Sign in with your AFEON Books organization account to continue.</p><form id="github-login-form" method="post" action="/api/auth/github/start"><input type="hidden" name="return_to" value="${escapeHtml(returnUrl)}"><input type="hidden" name="popup" value="1"><div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}" data-action="${GITHUB_TURNSTILE_ACTION}" data-callback="enableGithubLogin" data-expired-callback="disableGithubLogin" data-error-callback="disableGithubLogin"></div><button id="github-login-button" type="submit" disabled><img src="https://github.com/favicon.ico" alt="">Sign in with GitHub</button></form></main><script nonce="${nonce}">function enableGithubLogin(){document.getElementById("github-login-button").disabled=false}function disableGithubLogin(){document.getElementById("github-login-button").disabled=true}</script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script></body></html>`;
-  }
+function githubOAuthChallengePage(returnUrl: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>AFEON Books | Staff sign-in</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:28rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}button{margin-top:16px;padding:12px 20px;background:#111;color:#fff;border:0;font-weight:600;cursor:pointer}p{color:#555}</style></head><body><main><h1>Staff and admin sign-in</h1><p>Complete the security check to continue with GitHub.</p><form method="post" action="/api/auth/github/start"><input type="hidden" name="return_to" value="${escapeHtml(returnUrl)}"><div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}" data-action="${GITHUB_TURNSTILE_ACTION}"></div><button type="submit">Continue with GitHub</button><noscript><p>JavaScript must be enabled to complete the security check.</p></noscript></form></main><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script></body></html>`;
 }
 
@@ -91,7 +87,6 @@ function createGithubAuthorizationUrl(response: Response, credentials: { clientI
   const state = randomBytes(32).toString("hex");
   response.cookie(GITHUB_STATE_COOKIE, state, githubStateCookieOptions());
   response.cookie(GITHUB_RETURN_COOKIE, returnUrl, githubStateCookieOptions());
-  response.clearCookie(GITHUB_POPUP_COOKIE, githubStateCookieOptions());
   const authorizationUrl = new URL("https://github.com/login/oauth/authorize");
   authorizationUrl.search = new URLSearchParams({
     client_id: credentials.clientId,
@@ -100,16 +95,6 @@ function createGithubAuthorizationUrl(response: Response, credentials: { clientI
     state,
   }).toString();
   return authorizationUrl.toString();
-}
-
-function completeGithubPopup(response: Response, returnUrl: string): void {
-  const nonce = randomBytes(18).toString("base64url");
-  const safeReturnUrl = JSON.stringify(returnUrl).replace(/</g, "\\u003c");
-  response.set({
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'`,
-    "X-Frame-Options": "DENY",
-  }).type("html").send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AFEON Books | Sign-in complete</title></head><body><script nonce="${nonce}">if(window.opener&&!window.opener.closed){window.opener.location.replace(${safeReturnUrl});window.close()}else{window.location.replace(${safeReturnUrl})}</script></body></html>`);
 }
 
 async function githubApi<T>(url: string, accessToken: string): Promise<T> {
@@ -172,7 +157,7 @@ async function sendEmailCode(userId: number, email: string): Promise<void> {
     await sendAuthEmail(
       email,
       "Your AFEON Books sign-in code",
-      authEmailHtml("Sign in to AFEON Books", `Enter this five-digit code to sign in: ${code}. It expires in 10 minutes.`, `${AUTH_URL}/account`, "Open sign in"),
+      authEmailHtml("Your AFEON Books code", "Enter this code to sign in to your AFEON Books account.", `${AUTH_URL}/account`, "Login", code),
     );
   } catch (error) {
     await db.delete(authTokensTable).where(and(
@@ -184,9 +169,14 @@ async function sendEmailCode(userId: number, email: string): Promise<void> {
   }
 }
 
-function authEmailHtml(title: string, intro: string, link: string, label: string): string {
-  const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
-  return `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#111;background:#FAF7F2;padding:32px"><div style="max-width:560px;margin:auto;background:#fff;padding:32px;border:1px solid #eee"><p style="font-size:12px;letter-spacing:2px;font-weight:bold;color:#888">AFEON BOOKS</p><h1>${escape(title)}</h1><p style="line-height:1.6">${escape(intro)}</p><p><a href="${escape(link)}" style="display:inline-block;background:#111;color:#fff;padding:14px 22px;text-decoration:none;font-weight:bold">${escape(label)}</a></p><p style="font-size:12px;color:#666;word-break:break-all">If the button does not work, use: ${escape(link)}</p></div></body></html>`;
+function authEmailHtml(title: string, intro: string, link: string, label: string, code?: string): string {
+  const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const codeHtml = code
+    ? `<div style="margin:24px 0 0;font-size:34px;line-height:1.3;letter-spacing:2px;font-weight:400;color:#171717;">${escape(code)}</div><p style="margin:30px 0 0;font-size:16px;line-height:1.6;color:#222;">This code expires after 10 minutes or if you request a new code.</p><p style="margin:34px 0 0;font-size:18px;line-height:1.5;"><strong>Prefer not to use the code?</strong><br>Finish logging in to afeonbooks.com below.</p>`
+    : "";
+  const introHtml = code ? "" : `<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333;">${escape(intro)}</p>`;
+  const bodyHtml = `<h1 style="margin:0;font-size:24px;line-height:1.3;font-weight:700;">${escape(title)}</h1>${introHtml}${codeHtml}<p style="margin:22px 0 0;"><a href="${escape(link)}" style="display:inline-block;background:#7DD3EA;color:#111;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:18px;font-weight:400;">${escape(label)}</a></p>${code ? "" : `<p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#666;word-break:break-all;">If the button does not work, use this link: ${escape(link)}</p>`}`;
+  return renderBrandedEmail({ title, bodyHtml });
 }
 
 async function sendAuthEmail(to: string, subject: string, html: string): Promise<void> {
@@ -205,17 +195,15 @@ router.get("/auth/github/start", async (req, res): Promise<void> => {
   }
   const requestedReturnUrl = typeof req.query.return_to === "string" ? req.query.return_to : undefined;
   const returnUrl = allowedAdminReturnUrl(requestedReturnUrl);
-  const popup = req.query.popup === "1";
   if (!returnUrl) {
     res.status(400).set("Cache-Control", "no-store").json({ error: "The sign-in return URL is not allowed" });
     return;
   }
-  const nonce = randomBytes(18).toString("base64url");
   res.set({
     "Cache-Control": "no-store",
-    "Content-Security-Policy": `default-src 'none'; img-src 'self' https://github.com data: https://challenges.cloudflare.com; style-src 'unsafe-inline'; script-src https://challenges.cloudflare.com 'nonce-${nonce}'; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'`,
+    "Content-Security-Policy": "default-src 'none'; img-src 'self' data: https://challenges.cloudflare.com; style-src 'unsafe-inline'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'",
     "X-Frame-Options": "DENY",
-  }).type("html").send(githubOAuthChallengePage(returnUrl, popup, nonce));
+  }).type("html").send(githubOAuthChallengePage(returnUrl));
 });
 
 router.post("/auth/github/start", async (req, res): Promise<void> => {
@@ -238,14 +226,12 @@ router.post("/auth/github/start", async (req, res): Promise<void> => {
     return;
   }
   const authorizationUrl = createGithubAuthorizationUrl(res, credentials, returnUrl);
-  if (req.body?.popup === "1") res.cookie(GITHUB_POPUP_COOKIE, "1", githubStateCookieOptions());
   res.set("Cache-Control", "no-store").redirect(302, authorizationUrl);
 });
 
 router.get("/auth/github/callback", async (req, res): Promise<void> => {
   const state = typeof req.query.state === "string" ? req.query.state : "";
   const storedState = req.cookies?.[GITHUB_STATE_COOKIE];
-  const popup = req.cookies?.[GITHUB_POPUP_COOKIE] === "1";
   const stateCookieOptions = {
     httpOnly: true,
     secure: IS_PRODUCTION,
@@ -255,7 +241,6 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
   };
   res.clearCookie(GITHUB_STATE_COOKIE, stateCookieOptions);
   res.clearCookie(GITHUB_RETURN_COOKIE, stateCookieOptions);
-  res.clearCookie(GITHUB_POPUP_COOKIE, stateCookieOptions);
   const submittedState = Buffer.from(state);
   const expectedState = typeof storedState === "string" ? Buffer.from(storedState) : Buffer.alloc(0);
   if (
@@ -372,10 +357,6 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
 
   await destroySession(req, res);
   await createSession(user.id, req, res, String(githubUser.id));
-  if (popup) {
-    completeGithubPopup(res, returnUrl);
-    return;
-  }
   res.set("Cache-Control", "no-store").redirect(303, returnUrl);
 });
 

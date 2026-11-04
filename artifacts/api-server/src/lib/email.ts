@@ -18,6 +18,31 @@ export function applyVars(template:string, vars:TemplateVars):string {
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g,(_,key:string)=>{const v=map[key];return v===undefined?`{{${key}}}`:v;});
 }
 export interface RenderEmailInput { content:SiteContentRow; order:OrderRow; items:OrderItemRow[]; orderUrl:string; }
+interface BrandedEmailInput {
+  title: string;
+  bodyHtml: string;
+  accentColor?: string;
+  footerHtml?: string;
+  footerNote?: string;
+}
+
+const DEFAULT_EMAIL_ACCENT = "#7DD3EA";
+const PUBLIC_SITE_URL = "https://afeonbooks.com";
+const INSTAGRAM_URL = "https://go.afeonbooks.com/ins";
+
+function emailAccentColor(value?: string): string {
+  return /^#[\da-f]{6}$/i.test(value || "") ? value! : DEFAULT_EMAIL_ACCENT;
+}
+
+export function renderBrandedEmail({ title, bodyHtml, accentColor, footerHtml, footerNote }: BrandedEmailInput): string {
+  const accent = emailAccentColor(accentColor);
+  const footer = footerHtml ? `<tr><td style="padding:24px 40px 32px;border-top:1px solid #eee;font-size:13px;line-height:1.6;color:#666;">${footerHtml}</td></tr>` : "";
+  const customNote = footerNote && footerNote !== "© 2026 AFR Group. All Rights Reserved."
+    ? `<div style="margin-top:8px;">${escapeHtml(footerNote)}</div>`
+    : "";
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:12px;"><tr><td align="center"><table role="presentation" width="815" cellpadding="0" cellspacing="0" style="max-width:815px;width:100%;background:#fff;border:1px solid #eee;border-top:14px solid ${accent};"><tr><td style="padding:30px 50px 0;"><img src="${PUBLIC_SITE_URL}/afeonbooks-logo.png" width="100" height="100" alt="AFEON Books" style="display:block;width:100px;height:100px;object-fit:contain;border:0;"></td></tr><tr><td style="padding:16px 50px 16px;">${bodyHtml}</td></tr>${footer}</table><div style="max-width:815px;margin:12px auto 0;padding:0 12px;font-size:16px;line-height:1.5;color:#222;text-align:center;">Copyright © AFEON Books.<div style="margin-top:22px;"><a href="${PUBLIC_SITE_URL}" style="color:#222;text-decoration:none;">www.afeonbooks.com</a></div><div style="margin-top:16px;"><a href="${INSTAGRAM_URL}" aria-label="AFEON Books on Instagram" style="display:inline-block;width:28px;height:28px;border:3px solid #333;border-radius:9px;line-height:28px;text-decoration:none;"><span style="display:inline-block;vertical-align:middle;width:11px;height:11px;border:3px solid #333;border-radius:50%;"></span><span style="display:inline-block;vertical-align:top;margin:4px 0 0 1px;width:4px;height:4px;background:#333;border-radius:50%;"></span></a></div>${customNote}</div></td></tr></table></body></html>`;
+}
+
 export function buildVars({content,order,orderUrl}:{content:SiteContentRow;order:OrderRow;orderUrl:string}):TemplateVars {
   const useDefault=order.useDefaultAddress==="true";
   const shippingLines:string[]=[];
@@ -30,7 +55,7 @@ export function buildVars({content,order,orderUrl}:{content:SiteContentRow;order
 export function renderEmailHtml(input:RenderEmailInput):string {
   const {content,order,items,orderUrl}=input;
   const vars=buildVars({content,order,orderUrl});
-  const accent=content.emailAccentColor||content.accentColor||"#E2553B";
+  const accent=emailAccentColor(content.emailAccentColor||content.accentColor);
   const heading=applyVars(content.emailHeading,vars);
   const intro=applyVars(content.emailIntro,vars);
   const footer=applyVars(content.emailFooter,vars);
@@ -40,7 +65,14 @@ export function renderEmailHtml(input:RenderEmailInput):string {
   const itemsRows=items.map(it=>`<tr><td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;"><strong>${escapeHtml(it.productName)}</strong><br><span style="color:#666;font-size:12px;">Qty ${it.quantity} × ${formatPrice(it.unitPriceCents,order.currency)}</span></td><td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:bold;">${formatPrice(it.unitPriceCents*it.quantity,order.currency)}</td></tr>`).join("");
   const introHtml=escapeHtml(intro).replace(/\n/g,"<br>");
   const footerHtml=escapeHtml(footer).replace(/\n/g,"<br>");
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(applyVars(content.emailSubject,vars))}</title></head><body style="margin:0;padding:0;background:#FAF7F2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF7F2;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #eee;"><tr><td style="padding:32px 32px 8px"><div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:bold">${escapeHtml(content.brandName)}</div></td></tr><tr><td style="padding:8px 32px 0"><h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.5px">${escapeHtml(heading)}</h1></td></tr><tr><td style="padding:16px 32px 0;font-size:15px;line-height:1.6;color:#333">${introHtml}</td></tr><tr><td style="padding:24px 32px 0"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:${escapeHtml(accent)};color:#fff;text-decoration:none;padding:14px 28px;font-weight:bold;font-size:13px;letter-spacing:2px;text-transform:uppercase">${escapeHtml(buttonLabel)}</a></td></tr><tr><td style="padding:32px 32px 0"><div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:bold;margin-bottom:12px">Order Summary</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eee">${itemsRows}<tr><td style="padding:16px 0 0;font-size:14px;color:#666">Subtotal</td><td style="padding:16px 0 0;font-size:14px;text-align:right">${formatPrice(order.subtotalCents,order.currency)}</td></tr><tr><td style="padding:6px 0;font-size:14px;color:#666">Shipping</td><td style="padding:6px 0;font-size:14px;text-align:right">${order.shippingCents===0?"Free":formatPrice(order.shippingCents,order.currency)}</td></tr><tr><td style="padding:12px 0 0;font-size:16px;font-weight:bold;border-top:1px solid #eee">Total</td><td style="padding:12px 0 0;font-size:16px;text-align:right;font-weight:bold;border-top:1px solid #eee">${formatPrice(order.totalCents,order.currency)}</td></tr></table></td></tr><tr><td style="padding:24px 32px 0"><div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:bold;margin-bottom:12px">Shipping To</div><div style="font-size:14px;line-height:1.6;color:#333">${shippingHtml}</div></td></tr><tr><td style="padding:24px 32px 0"><div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:bold;margin-bottom:12px">Payment</div><div style="font-size:14px;color:#333">${escapeHtml(vars.paymentMethod)}</div></td></tr><tr><td style="padding:32px;font-size:13px;line-height:1.6;color:#666;border-top:1px solid #eee">${footerHtml}</td></tr></table><div style="max-width:600px;margin-top:16px;font-size:11px;color:#999;text-align:center">${escapeHtml(content.footerNote)}</div></td></tr></table></body></html>`;
+  const bodyHtml = `<h1 style="margin:0;font-size:24px;line-height:1.3;font-weight:700;">${escapeHtml(heading)}</h1><p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333;">${introHtml}</p><p style="margin:24px 0 0;"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:${escapeHtml(accent)};color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;">${escapeHtml(buttonLabel)}</a></p><div style="margin-top:32px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#777;font-weight:700;">Order Summary</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;border-top:1px solid #eee;">${itemsRows}<tr><td style="padding:16px 0 0;font-size:14px;color:#666;">Subtotal</td><td style="padding:16px 0 0;font-size:14px;text-align:right;">${formatPrice(order.subtotalCents,order.currency)}</td></tr><tr><td style="padding:6px 0;font-size:14px;color:#666;">Shipping</td><td style="padding:6px 0;font-size:14px;text-align:right;">${order.shippingCents===0?"Free":formatPrice(order.shippingCents,order.currency)}</td></tr><tr><td style="padding:12px 0 0;font-size:16px;font-weight:700;border-top:1px solid #eee;">Total</td><td style="padding:12px 0 0;font-size:16px;text-align:right;font-weight:700;border-top:1px solid #eee;">${formatPrice(order.totalCents,order.currency)}</td></tr></table><div style="margin-top:24px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#777;font-weight:700;">Shipping To</div><div style="margin-top:8px;font-size:14px;line-height:1.6;color:#333;">${shippingHtml}</div><div style="margin-top:24px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#777;font-weight:700;">Payment</div><div style="margin-top:8px;font-size:14px;color:#333;">${escapeHtml(vars.paymentMethod)}</div>`;
+  return renderBrandedEmail({
+    title: applyVars(content.emailSubject,vars),
+    bodyHtml,
+    accentColor: accent,
+    footerHtml: footerHtml || undefined,
+    footerNote: content.footerNote,
+  });
 }
 
 export interface SendEmailArgs { from:string; to:string|string[]; replyTo?:string; subject:string; html:string; }
@@ -154,10 +186,10 @@ export async function sendOrderStatusUpdateEmail(
   const fromAddress = "noreply@afeonbooks.com";
   const siteUrl = (process.env.PUBLIC_SITE_URL || "https://afeonbooks.com").replace(/\/+$/, "");
   const orderUrl = `${siteUrl}/order/${order.id}${accessToken ? `#access_token=${encodeURIComponent(accessToken)}` : ""}`;
-  const customerName = escapeHtml(order.customerName);
   const safeStatus = escapeHtml(status.replace(/_/g, " "));
-  const deliveryHtml = estimatedDeliveryDate ? `<p>Estimated delivery date: <strong>${escapeHtml(estimatedDeliveryDate)}</strong></p>` : "";
-  const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#222;line-height:1.6"><h2>Order #${order.id} status updated</h2><p>Hello ${customerName},</p><p>Your order status is now <strong>${safeStatus}</strong>.</p>${deliveryHtml}<p><a href="${orderUrl}">View your order</a></p><p>Thank you,<br>AFEON Books</p></body></html>`;
+  const deliveryHtml = estimatedDeliveryDate ? `<p style="margin:16px 0 0;">Estimated delivery date: <strong>${escapeHtml(estimatedDeliveryDate)}</strong></p>` : "";
+  const bodyHtml = `<h1 style="margin:0;font-size:24px;line-height:1.3;font-weight:700;">Order #${order.id} status updated</h1><p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333;">Hello ${escapeHtml(order.customerName)},</p><p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333;">Your order status is now <strong>${safeStatus}</strong>.</p>${deliveryHtml}<p style="margin:24px 0 0;"><a href="${escapeHtml(orderUrl)}" style="display:inline-block;background:${DEFAULT_EMAIL_ACCENT};color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;">View your order</a></p>`;
+  const html = renderBrandedEmail({ title: `Order #${order.id} status updated`, bodyHtml });
 
   try {
     const result = await sendEmail({

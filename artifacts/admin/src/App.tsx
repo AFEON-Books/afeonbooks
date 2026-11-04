@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Github } from "lucide-react";
 import { Toaster } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Editor from "@/pages/editor";
@@ -12,6 +13,118 @@ import ZohoMail from "@/pages/zoho-mail";
 import { MaintenancePage } from "@/pages/maintenance";
 
 const queryClient = new QueryClient();
+
+type TurnstileApi = {
+  render: (container: HTMLElement, options: {
+    sitekey: string;
+    action: string;
+    callback: (token: string) => void;
+    "expired-callback": () => void;
+    "error-callback": () => void;
+  }) => string;
+  reset: (widgetId: string) => void;
+  remove: (widgetId: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+const TURNSTILE_SITE_KEY = "0x4AAAAAAFY8DMwA2P5bWehZ";
+let turnstilePromise: Promise<TurnstileApi> | undefined;
+
+function loadTurnstile(): Promise<TurnstileApi> {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (turnstilePromise) return turnstilePromise;
+
+  turnstilePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.onload = () => {
+      if (window.turnstile) resolve(window.turnstile);
+      else reject(new Error("Turnstile unavailable"));
+    };
+    script.onerror = () => {
+      turnstilePromise = undefined;
+      reject(new Error("Unable to load Turnstile"));
+    };
+    document.head.append(script);
+  });
+  return turnstilePromise;
+}
+
+function GithubTurnstileDialog({
+  open,
+  onOpenChange,
+  returnUrl,
+  targetName,
+  hasTargetWindow,
+  onVerified,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  returnUrl: string;
+  targetName: string;
+  hasTargetWindow: () => boolean;
+  onVerified: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const widgetIdRef = useRef<string | undefined>(undefined);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setError("");
+
+    loadTurnstile().then((turnstile) => {
+      if (cancelled || !containerRef.current) return;
+      widgetIdRef.current = turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        action: "staff_github_login",
+        callback: () => {
+          const form = formRef.current;
+          if (!form) return;
+          if (!hasTargetWindow()) {
+            setError("The GitHub tab was closed. Close this check and click Sign in with GitHub again.");
+            if (widgetIdRef.current) turnstile.reset(widgetIdRef.current);
+            return;
+          }
+          form.submit();
+          onVerified();
+        },
+        "expired-callback": () => {
+          if (widgetIdRef.current) turnstile.reset(widgetIdRef.current);
+        },
+        "error-callback": () => setError("The security check could not load. Close this check and try again."),
+      });
+    }).catch(() => setError("The security check could not load. Close this check and try again."));
+
+    return () => {
+      cancelled = true;
+      if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
+      widgetIdRef.current = undefined;
+    };
+  }, [hasTargetWindow, onVerified, open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(94vw,360px)] gap-2 p-5">
+        <DialogTitle className="sr-only">Turnstile security check</DialogTitle>
+        <DialogDescription className="sr-only">Complete the security check to continue to GitHub.</DialogDescription>
+        <form ref={formRef} method="post" action="/api/auth/github/start" target={targetName}>
+          <input type="hidden" name="return_to" value={returnUrl} />
+          <div ref={containerRef} className="min-h-[65px]" />
+        </form>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function DebugOverlay() {
   const [altPressed, setAltPressed] = useState(false);
@@ -402,6 +515,10 @@ function StatusEditRedirect() {
 function AdminAccessGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<"loading" | "signed-out" | "denied" | "allowed">("loading");
   const [error, setError] = useState("");
+  const [turnstileOpen, setTurnstileOpen] = useState(false);
+  const [githubTargetName, setGithubTargetName] = useState("");
+  const [popupError, setPopupError] = useState("");
+  const githubWindowRef = useRef<Window | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -430,30 +547,61 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   const startGithubSignIn = () => {
-    const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
-    signInUrl.searchParams.set("return_to", window.location.href);
-    signInUrl.searchParams.set("popup", "1");
-    const popup = window.open(signInUrl.toString(), "afeonbooks-github-sign-in", "popup,width=480,height=440");
-    if (!popup) {
-      window.location.assign(signInUrl.toString());
+    const targetName = `afeonbooks-github-${crypto.randomUUID()}`;
+    const githubWindow = window.open("about:blank", targetName);
+    if (!githubWindow) {
+      setPopupError("Allow pop-ups for this site to continue to GitHub.");
       return;
     }
-    popup.focus();
+    githubWindow.document.title = "Continue to GitHub";
+    githubWindow.document.body.textContent = "Complete the security check in the previous tab. This tab will continue to GitHub automatically.";
+    githubWindowRef.current = githubWindow;
+    setGithubTargetName(targetName);
+    setPopupError("");
+    setTurnstileOpen(true);
   };
+
+  const handleTurnstileDialogChange = (open: boolean) => {
+    setTurnstileOpen(open);
+    if (!open && githubWindowRef.current) {
+      if (!githubWindowRef.current.closed) githubWindowRef.current.close();
+      githubWindowRef.current = null;
+    }
+  };
+
+  const hasGithubWindow = useCallback(() => Boolean(githubWindowRef.current && !githubWindowRef.current.closed), []);
+
+  const handleTurnstileVerified = useCallback(() => {
+    if (!githubWindowRef.current || githubWindowRef.current.closed) return;
+    githubWindowRef.current.focus();
+    githubWindowRef.current = null;
+    setTurnstileOpen(false);
+  }, []);
 
   if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
   if (status === "signed-out" || status === "denied") {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
-        <div className="w-full max-w-sm">
+      <>
+        <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
+          <div className="w-full max-w-sm">
           <h1 className="text-xl font-semibold">{status === "denied" ? "Staff access required" : "Staff sign-in"}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{status === "denied" ? error || "A verified GitHub staff sign-in is required." : "Use your GitHub account linked to an AFEON staff or admin profile."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{status === "denied" ? error || "An active GitHub organization sign-in is required." : "Use a GitHub account that belongs to the AFEON Books organization."}</p>
           <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
             <Github aria-hidden="true" size={20} />
             Sign in with GitHub
           </button>
-        </div>
-      </main>
+          {popupError && <p role="alert" className="mt-3 text-sm text-destructive">{popupError}</p>}
+          </div>
+        </main>
+        <GithubTurnstileDialog
+          open={turnstileOpen}
+          onOpenChange={handleTurnstileDialogChange}
+          returnUrl={window.location.href}
+          targetName={githubTargetName}
+          hasTargetWindow={hasGithubWindow}
+          onVerified={handleTurnstileVerified}
+        />
+      </>
     );
   }
   return <>{children}</>;

@@ -35,7 +35,7 @@ export const siteContentTable = pgTable("site_content", {
   emailIntro: text("email_intro").notNull().default("Hi {{customerName}},\n\nThanks for ordering from AFEON Books! Your order #{{orderId}} has been received and is being prepared. You'll pay {{total}} in cash on delivery."),
   emailButtonLabel: text("email_button_label").notNull().default("View your order"),
   emailFooter: text("email_footer").notNull().default("Questions about your order? Just reply to this email."),
-  emailAccentColor: text("email_accent_color").notNull().default("#E2553B"),
+  emailAccentColor: text("email_accent_color").notNull().default("#7DD3EA"),
   checkoutFields: text("checkout_fields").notNull().default("[]"),
   blogTitle: text("blog_title").notNull().default("Progress Update"),
   blogSubtitle: text("blog_subtitle").notNull().default("A look inside the latest adventure from the AFEON Books team."),
