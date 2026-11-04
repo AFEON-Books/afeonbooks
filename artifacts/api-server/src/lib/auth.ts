@@ -171,8 +171,8 @@ async function authorizeStaffIdentity(request: Request, response: Response, role
       gt(sessionsTable.expiresAt, new Date()),
     ))
     .limit(1);
-  if (!session?.githubUserId || !request.user.emailVerifiedAt) {
-    response.status(403).json({ error: "A verified GitHub staff sign-in is required" });
+  if (!session?.githubUserId) {
+    response.status(403).json({ error: "An active GitHub organization sign-in is required" });
     return false;
   }
   return true;

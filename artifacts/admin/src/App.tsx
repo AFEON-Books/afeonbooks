@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Github } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -428,27 +429,29 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
-  if (status === "signed-out") {
+  const startGithubSignIn = () => {
     const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
     signInUrl.searchParams.set("return_to", window.location.href);
+    signInUrl.searchParams.set("popup", "1");
+    const popup = window.open(signInUrl.toString(), "afeonbooks-github-sign-in", "popup,width=460,height=240");
+    if (!popup) {
+      window.location.assign(signInUrl.toString());
+      return;
+    }
+    popup.focus();
+  };
+
+  if (status === "loading") return <main className="min-h-screen flex items-center justify-center">Checking staff access…</main>;
+  if (status === "signed-out" || status === "denied") {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
-        <div>
-          <h1 className="text-xl font-semibold">Sign in with GitHub</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Use your AFEON-Books organization account linked to a verified AFEON staff or admin account.</p>
-          <a className="mt-5 inline-block rounded bg-primary px-5 py-3 text-primary-foreground" href={signInUrl.toString()}>Continue with GitHub</a>
-        </div>
-      </main>
-    );
-  }
-  if (status === "denied") {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
-        <div>
-          <h1 className="text-xl font-semibold">Staff access required</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{error || "This GitHub account is not linked to an AFEON account with the staff or admin role."}</p>
-          <a className="mt-5 inline-block rounded border px-5 py-3" href={new URL(`/api/auth/github/start?return_to=${encodeURIComponent(window.location.href)}`, "https://afeonbooks.com").toString()}>Try another GitHub account</a>
+        <div className="w-full max-w-sm">
+          <h1 className="text-xl font-semibold">{status === "denied" ? "Staff access required" : "Staff sign-in"}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{status === "denied" ? error || "A verified GitHub staff sign-in is required." : "Use your GitHub account linked to an AFEON staff or admin profile."}</p>
+          <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
+            <Github aria-hidden="true" size={20} />
+            Sign in with GitHub
+          </button>
         </div>
       </main>
     );
