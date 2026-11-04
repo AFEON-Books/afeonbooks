@@ -17,6 +17,7 @@ export const sessionsTable = pgTable("sessions", {
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   githubUserId: text("github_user_id"),
+  githubAuthenticatedAt: timestamp("github_authenticated_at", { withTimezone: true }),
 });
 
 export const githubAccountLinksTable = pgTable("github_account_links", {

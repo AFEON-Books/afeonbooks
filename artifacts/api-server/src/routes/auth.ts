@@ -1,9 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
-import { authRateLimitsTable, authTokensTable, db, githubAccountLinksTable, loyaltyTransactionsTable, usersTable } from "@workspace/db";
+import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
+  consumeFreshGithubAuthentication,
   createAuthToken,
   createSession,
   destroySession,
@@ -65,10 +66,6 @@ function allowedAdminReturnUrl(value: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isStaffOrAdmin(user: { role: string | null } | undefined): boolean {
-  return user?.role === "staff" || user?.role === "admin";
 }
 
 function githubFailure(response: Response, status: number, message: string): void {
@@ -343,67 +340,23 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  const githubAccounts = await db.select({
-    linkId: githubAccountLinksTable.id,
-    githubUserId: githubAccountLinksTable.githubUserId,
-    user: usersTable,
-  })
-    .from(githubAccountLinksTable)
-    .innerJoin(usersTable, eq(usersTable.id, githubAccountLinksTable.userId))
-    .where(or(
-      eq(githubAccountLinksTable.githubUserId, String(githubUser.id)),
-      sql`lower(${githubAccountLinksTable.githubUsername}) = ${githubUser.login.toLowerCase()}`,
-    ))
-    .limit(2);
-  if (githubAccounts.length !== 1) {
-    if (githubAccounts.length > 1) {
-      githubFailure(res, 403, "This GitHub identity matches conflicting AFEON account links. Ask an administrator to review the account-link table.");
-      return;
-    }
-    githubFailure(res, 403, "This GitHub account is not linked to an AFEON Books account. Ask an administrator to add the GitHub username to the account-link table.");
+  const githubIdentityEmail = `github-${githubUser.id}@github.afeonbooks.invalid`;
+  const [user] = await db.insert(usersTable).values({
+    email: githubIdentityEmail,
+    passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+    name: githubUser.login,
+    role: "staff",
+  }).onConflictDoUpdate({
+    target: usersTable.email,
+    set: { name: githubUser.login, role: "staff" },
+  }).returning();
+  if (!user) {
+    githubFailure(res, 500, "Unable to create your GitHub staff session. Please try again.");
     return;
   }
-  const githubAccount = githubAccounts[0]!;
-  if (githubAccount.githubUserId && githubAccount.githubUserId !== String(githubUser.id)) {
-    githubFailure(res, 403, "This GitHub username is linked to a different GitHub identity. Ask an administrator to review the account link.");
-    return;
-  }
-  if (!isStaffOrAdmin(githubAccount.user) || !githubAccount.user.emailVerifiedAt) {
-    githubFailure(res, 403, "The linked AFEON Books account must have a verified email and the staff or admin role.");
-    return;
-  }
-
-  const currentUser = await loadUser(req);
-  if (currentUser && currentUser.id !== githubAccount.user.id) {
-    githubFailure(res, 403, "This GitHub account is linked to a different AFEON Books account. Your current account is still signed in.");
-    return;
-  }
-
-  const boundLink = await db.transaction(async (tx) => {
-    const [link] = await tx.select()
-      .from(githubAccountLinksTable)
-      .where(eq(githubAccountLinksTable.id, githubAccount.linkId))
-      .for("update")
-      .limit(1);
-    if (!link || (link.githubUserId && link.githubUserId !== String(githubUser.id))) return false;
-    await tx.update(githubAccountLinksTable)
-      .set({ githubUsername: githubUser.login, githubUserId: String(githubUser.id) })
-      .where(eq(githubAccountLinksTable.id, githubAccount.linkId));
-    return true;
-  });
-  if (!boundLink) {
-    githubFailure(res, 403, "This GitHub account is already linked to a different GitHub identity. Ask an administrator to review the account link.");
-    return;
-  }
-
-  if (currentUser) {
-    req.user = currentUser;
-    if (!await markSessionGithubOrganizationVerified(req, String(githubUser.id))) {
-      githubFailure(res, 401, "Your AFEON Books session expired. Sign in again and retry GitHub sign-in.");
-      return;
-    }
-  } else {
-    await createSession(githubAccount.user.id, req, res, String(githubUser.id));
+  if (!await markSessionGithubOrganizationVerified(req, user.id, String(githubUser.id))) {
+    await destroySession(req, res);
+    await createSession(user.id, req, res, String(githubUser.id), new Date());
   }
   res.set("Cache-Control", "no-store").redirect(303, returnUrl);
 });
@@ -555,6 +508,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 });
 
 router.get("/auth/admin/access", requireUser, requireStaffAccess("staff", "admin"), async (req, res): Promise<void> => {
+  if (!await consumeFreshGithubAuthentication(req)) {
+    res.status(403).set("Cache-Control", "no-store").json({ error: "Sign in with GitHub again to open this protected page." });
+    return;
+  }
   res.set("Cache-Control", "no-store").json({ user: publicUser(req.user!) });
 });
 

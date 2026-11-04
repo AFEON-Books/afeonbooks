@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Github } from "lucide-react";
 import { Toaster } from "sonner";
@@ -60,15 +60,11 @@ function GithubTurnstileDialog({
   open,
   onOpenChange,
   returnUrl,
-  targetName,
-  hasTargetWindow,
   onVerified,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnUrl: string;
-  targetName: string;
-  hasTargetWindow: () => boolean;
   onVerified: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,11 +85,14 @@ function GithubTurnstileDialog({
         callback: () => {
           const form = formRef.current;
           if (!form) return;
-          if (!hasTargetWindow()) {
-            setError("The GitHub tab was closed. Close this check and click Sign in with GitHub again.");
+          const targetName = `afeonbooks-github-${crypto.randomUUID()}`;
+          const githubWindow = window.open("about:blank", targetName);
+          if (!githubWindow) {
+            setError("Your browser blocked the GitHub tab. Allow pop-ups and try the security check again.");
             if (widgetIdRef.current) turnstile.reset(widgetIdRef.current);
             return;
           }
+          form.target = targetName;
           form.submit();
           onVerified();
         },
@@ -109,14 +108,14 @@ function GithubTurnstileDialog({
       if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current);
       widgetIdRef.current = undefined;
     };
-  }, [hasTargetWindow, onVerified, open]);
+  }, [onVerified, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(94vw,360px)] gap-2 p-5">
         <DialogTitle className="sr-only">Turnstile security check</DialogTitle>
         <DialogDescription className="sr-only">Complete the security check to continue to GitHub.</DialogDescription>
-        <form ref={formRef} method="post" action="/api/auth/github/start" target={targetName}>
+        <form ref={formRef} method="post" action="/api/auth/github/start">
           <input type="hidden" name="return_to" value={returnUrl} />
           <div ref={containerRef} className="min-h-[65px]" />
         </form>
@@ -513,75 +512,40 @@ function StatusEditRedirect() {
 }
 
 function AdminAccessGate({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<"loading" | "signed-out" | "account-required" | "github-required" | "allowed">("loading");
-  const [error, setError] = useState("");
+  const [location] = useLocation();
+  const accessLocation = `${location}${window.location.hash}`;
+  const [status, setStatus] = useState<"loading" | "signed-out" | "github-required" | "allowed">("loading");
   const [turnstileOpen, setTurnstileOpen] = useState(false);
-  const [githubTargetName, setGithubTargetName] = useState("");
-  const [popupError, setPopupError] = useState("");
-  const githubWindowRef = useRef<Window | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
+    setStatus("loading");
+    fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        const data = await response.json().catch(() => ({})) as { user?: { role?: string } | null; error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Unable to check your AFEON Books account");
-        if (!data.user) {
+        if (response.status === 401) {
           if (!cancelled) setStatus("signed-out");
           return;
         }
-        if (data.user.role !== "staff" && data.user.role !== "admin") {
-          if (!cancelled) setStatus("account-required");
-          return;
-        }
-        const accessResponse = await fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" });
-        const accessData = await accessResponse.json().catch(() => ({})) as { error?: string };
-        if (accessResponse.status === 403) {
-          if (!cancelled) setError(accessData.error ?? "");
+        if (response.status === 403) {
           if (!cancelled) setStatus("github-required");
           return;
         }
-        if (!accessResponse.ok) throw new Error(accessData.error ?? "Unable to verify staff access");
+        if (!response.ok) throw new Error("Unable to verify staff access");
         if (!cancelled) setStatus("allowed");
       })
-      .catch((cause: unknown) => {
-        if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "Unable to verify staff access");
-          setStatus("account-required");
-        }
-      });
+      .catch(() => { if (!cancelled) setStatus("github-required"); });
     return () => { cancelled = true; };
-  }, []);
+  }, [accessLocation]);
 
   const startGithubSignIn = () => {
-    const targetName = `afeonbooks-github-${crypto.randomUUID()}`;
-    const githubWindow = window.open("about:blank", targetName);
-    if (!githubWindow) {
-      setPopupError("Allow pop-ups for this site to continue to GitHub.");
-      return;
-    }
-    githubWindow.document.title = "Continue to GitHub";
-    githubWindow.document.body.textContent = "Complete the security check in the previous tab. This tab will continue to GitHub automatically.";
-    githubWindowRef.current = githubWindow;
-    setGithubTargetName(targetName);
-    setPopupError("");
     setTurnstileOpen(true);
   };
 
   const handleTurnstileDialogChange = (open: boolean) => {
     setTurnstileOpen(open);
-    if (!open && githubWindowRef.current) {
-      if (!githubWindowRef.current.closed) githubWindowRef.current.close();
-      githubWindowRef.current = null;
-    }
   };
 
-  const hasGithubWindow = useCallback(() => Boolean(githubWindowRef.current && !githubWindowRef.current.closed), []);
-
   const handleTurnstileVerified = useCallback(() => {
-    if (!githubWindowRef.current || githubWindowRef.current.closed) return;
-    githubWindowRef.current.focus();
-    githubWindowRef.current = null;
     setTurnstileOpen(false);
   }, []);
 
@@ -591,21 +555,18 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
       <>
         <main className="min-h-screen flex items-center justify-center bg-background px-6 text-center">
           <div className="w-full max-w-sm">
-          <h1 className="text-xl font-semibold">{status === "github-required" || status === "signed-out" ? "Sign in with GitHub" : "Staff account required"}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{status === "github-required" ? error || "Your GitHub account must be linked to an AFEON Books staff or admin account and belong to the organization." : status === "account-required" ? "Sign in with a GitHub account linked to an AFEON Books account that has the staff or admin role." : "Continue with the GitHub username linked to your AFEON Books staff or admin account."}</p>
-          {(status === "github-required" || status === "signed-out") && <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
+          <h1 className="text-xl font-semibold">Sign in with GitHub</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Use a GitHub account that belongs to the AFEON Books organization.</p>
+          <button type="button" onClick={startGithubSignIn} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
             <Github aria-hidden="true" size={20} />
-            {status === "signed-out" ? "Sign in with GitHub" : "Continue with GitHub"}
-          </button>}
-          {popupError && <p role="alert" className="mt-3 text-sm text-destructive">{popupError}</p>}
+            Sign in with GitHub
+          </button>
           </div>
         </main>
         <GithubTurnstileDialog
           open={turnstileOpen}
           onOpenChange={handleTurnstileDialogChange}
           returnUrl={window.location.href}
-          targetName={githubTargetName}
-          hasTargetWindow={hasGithubWindow}
           onVerified={handleTurnstileVerified}
         />
       </>
@@ -677,19 +638,19 @@ function App() {
         {isStatusEditPath ? (
           <StatusEditRedirect />
         ) : (
-          <AdminAccessGate>
-            {isPosPath ? (
-              <Pos />
-            ) : isZohoMailPath || adminView === "#zoho-mail" ? (
-              <ZohoMail />
-            ) : (
-              <WouterRouter base={adminBase}>
+          <WouterRouter base={adminBase}>
+            <AdminAccessGate>
+              {isPosPath ? (
+                <Pos />
+              ) : isZohoMailPath || adminView === "#zoho-mail" ? (
+                <ZohoMail />
+              ) : (
                 <Router />
-              </WouterRouter>
-            )}
-            {!isPosPath && !isZohoMailPath && <OrderEmailOverlay />}
-            <DebugOverlay />
-          </AdminAccessGate>
+              )}
+              {!isPosPath && !isZohoMailPath && <OrderEmailOverlay />}
+              <DebugOverlay />
+            </AdminAccessGate>
+          </WouterRouter>
         )}
         <Toaster position="top-center" richColors />
       </TooltipProvider>

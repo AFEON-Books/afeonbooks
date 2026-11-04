@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Github } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 import { CartProvider } from "@/lib/cart";
 import { UtmProvider } from "@/lib/utm";
 import NotFound from "@/pages/not-found";
@@ -59,52 +62,93 @@ function Router() {
 }
 
 function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const [status, setStatus] = useState<"loading" | "signed-out" | "account-required" | "github-required" | "allowed">("loading");
-  const [error, setError] = useState("");
+  const { loading } = useAuth();
+  const [location] = useLocation();
+  const accessLocation = `${location}${window.location.hash}`;
+  const [status, setStatus] = useState<"loading" | "signed-out" | "github-required" | "allowed">("loading");
+  const [accessError, setAccessError] = useState("");
+  const [turnstileOpen, setTurnstileOpen] = useState(false);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [popupError, setPopupError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const tokenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
-      setStatus("signed-out");
-      return;
-    }
-    if (user.role !== "staff" && user.role !== "admin") {
-      setStatus("account-required");
-      return;
-    }
     let cancelled = false;
+    setStatus("loading");
+    setAccessError("");
     fetch("/api/auth/admin/access", { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        const data = await response.json().catch(() => ({})) as { user?: { role?: string }; error?: string };
+        if (response.status === 401) {
+          if (!cancelled) setStatus("signed-out");
+          return;
+        }
         if (response.status === 403) {
-          if (!cancelled) setError(data.error ?? "");
           if (!cancelled) setStatus("github-required");
           return;
         }
-        if (!response.ok) throw new Error(data.error ?? "Unable to verify mailbox access");
-        if (!cancelled) setStatus(data.user?.role === "staff" || data.user?.role === "admin" ? "allowed" : "account-required");
+        if (!response.ok) throw new Error("Unable to verify mailbox access");
+        if (!cancelled) setStatus("allowed");
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        setError(cause instanceof Error ? cause.message : "Unable to verify mailbox access");
+        setAccessError(cause instanceof Error ? cause.message : "Unable to verify mailbox access");
         setStatus("github-required");
       });
     return () => { cancelled = true; };
-  }, [loading, user]);
+  }, [accessLocation, loading]);
+
+  const handleTurnstileToken = useCallback((token: string) => {
+    if (!token) return;
+    const form = formRef.current;
+    const targetName = `afeonbooks-github-${crypto.randomUUID()}`;
+    const githubWindow = window.open("about:blank", targetName);
+    if (!githubWindow) {
+      setPopupError("Your browser blocked the GitHub tab. Allow pop-ups and try the security check again.");
+      setTurnstileResetKey((current) => current + 1);
+      return;
+    }
+    if (!form || !tokenInputRef.current) {
+      githubWindow.close();
+      setPopupError("Unable to start GitHub sign-in. Please try again.");
+      return;
+    }
+    tokenInputRef.current.value = token;
+    form.target = targetName;
+    form.submit();
+    setTurnstileOpen(false);
+    setPopupError("");
+  }, []);
 
   if (status === "allowed") return <>{children}</>;
   if (status === "loading" || loading) return <main className="flex min-h-screen items-center justify-center">Checking mailbox access…</main>;
-  const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
-  signInUrl.searchParams.set("return_to", window.location.href);
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 text-center">
-      <div className="max-w-md">
-        <h1 className="text-xl font-semibold">Staff mailbox access required</h1>
-        <p className="mt-2 text-sm text-black/60">{status === "github-required" ? error || "Use the GitHub username linked to an AFEON Books staff or admin account." : status === "account-required" ? "Sign in with a GitHub account linked to an AFEON Books account that has the staff or admin role." : "Continue with the GitHub username linked to your AFEON Books staff or admin account."}</p>
-        {(status === "signed-out" || status === "github-required") && <a className="mt-5 inline-block border border-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest" href={signInUrl.toString()}>{status === "signed-out" ? "Sign in with GitHub" : "Continue with GitHub"}</a>}
-      </div>
-    </main>
+    <>
+      <main className="flex min-h-screen items-center justify-center bg-[#FAF7F2] px-6 text-center">
+        <div className="w-full max-w-sm">
+          <h1 className="text-xl font-semibold">Sign in with GitHub</h1>
+          <p className="mt-2 text-sm text-black/60">Use a GitHub account that belongs to the AFEON Books organization.</p>
+          <button type="button" onClick={() => { setPopupError(""); setTurnstileOpen(true); }} className="mt-6 inline-flex items-center gap-3 rounded-md bg-[#24292f] px-5 py-3 font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]">
+            <Github aria-hidden="true" size={20} />
+            Sign in with GitHub
+          </button>
+          {accessError && <p role="alert" className="mt-3 text-sm text-red-700">{accessError}</p>}
+        </div>
+      </main>
+      <Dialog open={turnstileOpen} onOpenChange={setTurnstileOpen}>
+        <DialogContent className="w-[min(94vw,360px)] gap-2 p-5">
+          <DialogTitle className="sr-only">Turnstile security check</DialogTitle>
+          <DialogDescription className="sr-only">Complete the security check to continue to GitHub.</DialogDescription>
+          <TurnstileWidget action="staff_github_login" onToken={handleTurnstileToken} resetKey={turnstileResetKey} />
+          <form ref={formRef} method="post" action="https://api.afeonbooks.com/api/auth/github/start">
+            <input ref={tokenInputRef} type="hidden" name="cf-turnstile-response" />
+            <input type="hidden" name="return_to" value={window.location.href} />
+          </form>
+          {popupError && <p role="alert" className="text-sm text-red-700">{popupError}</p>}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

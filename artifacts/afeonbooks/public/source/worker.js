@@ -542,31 +542,6 @@ if (url.hostname === "authn.afeonbooks.com") {
     const isMailSystem = url.hostname === "mailsystem.afeonbooks.com";
 
     if (
-      (isAdminRoute || isMailSystem) &&
-      request.method === "GET" &&
-      request.headers.get("Accept")?.includes("text/html")
-    ) {
-      let staffSession;
-      try {
-        staffSession = await getAdminUserFromSession(request);
-      } catch (error) {
-        console.error(JSON.stringify({
-          message: "Admin page session check failed",
-          error: error instanceof Error ? error.message : String(error),
-        }));
-        return new Response("Unable to verify staff access. Please try again shortly.", {
-          status: 503,
-          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-        });
-      }
-      if (!staffSession?.user) {
-        const authUrl = new URL("https://afeonbooks.com/api/auth/github/start");
-        authUrl.searchParams.set("return_to", request.url);
-        return Response.redirect(authUrl.toString(), 302);
-      }
-    }
-
-    if (
       !isMailSystem &&
       !isAdminRoute &&
       request.method === "GET" &&

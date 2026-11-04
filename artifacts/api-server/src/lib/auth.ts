@@ -83,13 +83,20 @@ export function publicUser(user: UserRow) {
   return { id: user.id, email: user.email, name: user.name, role: user.role ?? "customer", createdAt: user.createdAt.toISOString() };
 }
 
-export async function createSession(userId: number, request: Request, response: Response, githubUserId?: string): Promise<void> {
+export async function createSession(
+  userId: number,
+  request: Request,
+  response: Response,
+  githubUserId?: string,
+  githubAuthenticatedAt?: Date,
+): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(sessionsTable).values({
     tokenHash: hashSessionToken(token),
     userId,
     expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     githubUserId: githubUserId ?? null,
+    githubAuthenticatedAt: githubAuthenticatedAt ?? null,
   });
   const domain = sessionCookieDomain(request);
   const secure = IS_PRODUCTION || domain !== undefined;
@@ -139,20 +146,33 @@ export async function loadUser(request: Request): Promise<UserRow | undefined> {
     .innerJoin(usersTable, eq(usersTable.id, sessionsTable.userId))
     .where(and(eq(sessionsTable.tokenHash, hashSessionToken(token)), gt(sessionsTable.expiresAt, new Date())))
     .limit(1);
-  const user = rows[0]?.user;
-  if (user?.email.endsWith("@github.afeonbooks.invalid")) return undefined;
-  return user;
+  return rows[0]?.user;
 }
 
-export async function markSessionGithubOrganizationVerified(request: Request, githubUserId: string): Promise<boolean> {
+export async function markSessionGithubOrganizationVerified(request: Request, userId: number, githubUserId: string): Promise<boolean> {
+  const token = request.cookies?.[SESSION_COOKIE];
+  if (!token) return false;
+  const [session] = await db.update(sessionsTable)
+    .set({ userId, githubUserId, githubAuthenticatedAt: new Date() })
+    .where(and(
+      eq(sessionsTable.tokenHash, hashSessionToken(token)),
+      gt(sessionsTable.expiresAt, new Date()),
+    ))
+    .returning({ userId: sessionsTable.userId });
+  return session?.userId === userId;
+}
+
+export async function consumeFreshGithubAuthentication(request: Request): Promise<boolean> {
   const token = request.cookies?.[SESSION_COOKIE];
   if (!token || !request.user) return false;
+  const now = new Date();
   const [session] = await db.update(sessionsTable)
-    .set({ githubUserId })
+    .set({ githubAuthenticatedAt: null })
     .where(and(
       eq(sessionsTable.tokenHash, hashSessionToken(token)),
       eq(sessionsTable.userId, request.user.id),
-      gt(sessionsTable.expiresAt, new Date()),
+      gt(sessionsTable.expiresAt, now),
+      gt(sessionsTable.githubAuthenticatedAt, new Date(now.getTime() - 5 * 60 * 1000)),
     ))
     .returning({ userId: sessionsTable.userId });
   return session?.userId === request.user.id;

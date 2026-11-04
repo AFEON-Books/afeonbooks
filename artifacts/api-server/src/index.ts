@@ -128,6 +128,7 @@ async function ensureAuthTables() {
       github_user_id text
     );
     ALTER TABLE sessions ADD COLUMN IF NOT EXISTS github_user_id text;
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS github_authenticated_at timestamptz;
     CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
     CREATE TABLE IF NOT EXISTS github_account_links (
       id serial PRIMARY KEY,
