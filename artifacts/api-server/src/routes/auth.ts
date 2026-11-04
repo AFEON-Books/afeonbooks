@@ -196,7 +196,7 @@ router.get("/auth/github/start", async (req, res): Promise<void> => {
   }
   res.set({
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; img-src data: https://challenges.cloudflare.com; style-src 'unsafe-inline'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'none'; img-src data: https://challenges.cloudflare.com; style-src 'unsafe-inline'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'",
     "X-Frame-Options": "DENY",
   }).type("html").send(githubOAuthChallengePage(returnUrl));
 });
