@@ -184,6 +184,33 @@ export function requireStaffAccess(...roles: string[]) {
   };
 }
 
+export function requireGithubOrganizationMember() {
+  return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+    if (!request.user) {
+      response.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const token = request.cookies?.[SESSION_COOKIE];
+    if (!token) {
+      response.status(403).json({ error: "Sign in with a GitHub organization account to change maintenance mode" });
+      return;
+    }
+    const [session] = await db.select({ githubUserId: sessionsTable.githubUserId })
+      .from(sessionsTable)
+      .where(and(
+        eq(sessionsTable.tokenHash, hashSessionToken(token)),
+        eq(sessionsTable.userId, request.user.id),
+        gt(sessionsTable.expiresAt, new Date()),
+      ))
+      .limit(1);
+    if (!session?.githubUserId) {
+      response.status(403).json({ error: "Sign in with a GitHub organization account to change maintenance mode" });
+      return;
+    }
+    next();
+  };
+}
+
 export function requireRole(...roles: string[]) {
   return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     if (!await authorizeStaffIdentity(request, response, roles)) return;

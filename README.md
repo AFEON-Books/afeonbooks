@@ -119,6 +119,8 @@ Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service
 
 Apply migrations 0003, 0004, and 0005 before deploying the API. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
 
+Set `MAINTENANCE_KEY` as a secret environment variable on the API service. Direct maintenance toggles use `https://api.afeonbooks.com/api/maintenance/off?key=<MAINTENANCE_KEY>` or `/api/maintenance/on?key=<MAINTENANCE_KEY>`. Choose a long random value and do not commit it or share the full URL; the key is required and there is no default.
+
 Add `AUTH_CODE_PEPPER` as a random secret environment variable on the API service. Do not commit it. The API uses it to HMAC email login codes and rate-limit keys.
 
 Customer authentication remains public and separate from GitHub OAuth. The sign-in page starts with email lookup. Existing verified accounts receive a five-digit sign-in code (10-minute expiry, at most three sends per 15 minutes and five code attempts); password sign-in remains available. Unknown addresses are offered signup and the existing email-verification flow. Because the requested flow discloses whether an email has an account, the lookup is protected by Turnstile and database-backed rate limits but still permits account enumeration.

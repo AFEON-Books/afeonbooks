@@ -433,7 +433,7 @@ function AdminAccessGate({ children }: { children: React.ReactNode }) {
     const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
     signInUrl.searchParams.set("return_to", window.location.href);
     signInUrl.searchParams.set("popup", "1");
-    const popup = window.open(signInUrl.toString(), "afeonbooks-github-sign-in", "popup,width=460,height=240");
+    const popup = window.open(signInUrl.toString(), "afeonbooks-github-sign-in", "popup,width=480,height=440");
     if (!popup) {
       window.location.assign(signInUrl.toString());
       return;
