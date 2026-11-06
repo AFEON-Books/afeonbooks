@@ -225,22 +225,40 @@ function directoryKeyMatches(url, env) {
 
 async function getAdminUserFromSession(request) {
   const cookie = request.headers.get("Cookie");
-  if (!cookie) return null;
-  const response = await fetch("https://api.afeonbooks.com/api/auth/admin/access", {
-    headers: { Accept: "application/json", Cookie: cookie },
+  const headers = new Headers({ Accept: "application/json" });
+  if (cookie) headers.set("Cookie", cookie);
+  const sessionResponse = await fetch("https://api.afeonbooks.com/api/auth/me", {
+    headers,
     redirect: "manual",
   });
-
-  if (response.status === 401 || response.status === 403) return null;
-  if (!response.ok) {
-    throw new Error(`Admin session check failed with status ${response.status}`);
+  if (!sessionResponse.ok) {
+    throw new Error(`Account session check failed with status ${sessionResponse.status}`);
+  }
+  const sessionPayload = await sessionResponse.json();
+  if (!sessionPayload || !Object.hasOwn(sessionPayload, "user")) {
+    throw new Error("Account session check returned an invalid response");
+  }
+  const user = sessionPayload.user ?? null;
+  if (!user || (user.role !== "staff" && user.role !== "admin")) {
+    return { user, organizationVerified: false };
   }
 
-  const payload = await response.json();
-  if (!payload || !Object.hasOwn(payload, "user")) {
-    throw new Error("Admin session check returned an invalid response");
+  const accessResponse = await fetch("https://api.afeonbooks.com/api/auth/admin/access", {
+    headers,
+    redirect: "manual",
+  });
+  if (accessResponse.status === 401) return { user: null, organizationVerified: false };
+  if (accessResponse.status === 403) return { user, organizationVerified: false };
+  if (!accessResponse.ok) {
+    throw new Error(`Admin organization check failed with status ${accessResponse.status}`);
   }
-  return { user: payload.user ?? null };
+  return { user, organizationVerified: true };
+}
+
+function githubOrganizationRedirect(request) {
+  const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
+  signInUrl.searchParams.set("return_to", request.url);
+  return Response.redirect(signInUrl.toString(), 302);
 }
 
 function sourceAuthError(status, message) {
@@ -502,15 +520,12 @@ if (url.hostname === "source.afeonbooks.com") {
     return sourceAuthError(503, "The session check failed. Please try again shortly.");
   }
 
-  if (!user) {
-    const authUrl = new URL("https://afeonbooks.com/api/auth/github/start");
-    authUrl.searchParams.set("return_to", request.url);
-    return Response.redirect(authUrl.toString(), 302);
-  }
+  if (!user?.user) return githubOrganizationRedirect(request);
 
-  if (user.user?.role !== "staff" && user.user?.role !== "admin") {
+  if (user.user.role !== "staff" && user.user.role !== "admin") {
     return sourceAuthError(403, "A staff or admin account is required to access this dashboard.");
   }
+  if (!user.organizationVerified) return githubOrganizationRedirect(request);
 
   return new Response(sourceDashboardHtml(), {
     headers: {
