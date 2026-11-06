@@ -1,5 +1,12 @@
 # AFEON Books
 
+[![GitHub Repo](https://img.shields.io/badge/GitHub-acdu1%2Fafeonbooks-181717?logo=github)](https://github.com/acdu1/afeonbooks)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-12.3.4-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
+
 AFEON Books is a TypeScript monorepo for the AFEON Books storefront, admin dashboard, point-of-sale tools, and Express API.
 
 ## Stack
@@ -119,7 +126,7 @@ Admin, mailbox, and source dashboard access use GitHub OAuth directly; Cloudflar
 - **Homepage URL:** `https://afeonbooks.com`
 - **Authorization callback URL:** `https://api.afeonbooks.com/api/auth/github/callback`
 
-Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user` and `read:org`. Sign-in authorization checks only for active membership in the configured organization; it does not compare the GitHub email, username, or an existing AFEON account role. The API provisions an internal staff identity keyed by GitHub's immutable numeric user ID. Every protected-page entry requires a fresh GitHub OAuth sign-in, which also rechecks organization membership. The GitHub sign-in UI requires Turnstile (`staff_github_login` action); after success it opens the GitHub authorization flow in a new tab. Removing someone from the organization prevents further sign-ins. The admin and mail-system pages render Turnstile on `afeonbooks.com` and `mailsystem.afeonbooks.com`, respectively, so add both exact hostnames to the widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostnames, no scheme or wildcard). Keep the customer sign-in hostnames used by the existing email flow in those lists too.
+Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user`, `user:email`, and `read:org`. Sign-in requires active membership in the configured organization and a verified GitHub email that exactly matches an existing AFEON Books staff or admin account. The API never creates or promotes an account during GitHub sign-in; it preserves the matching database user's name, email, and role. Every protected-page entry requires a fresh GitHub OAuth sign-in, which also rechecks organization membership. The GitHub sign-in UI requires Turnstile (`staff_github_login` action); after success it opens the GitHub authorization flow in a new tab. Removing someone from the organization prevents further sign-ins. The admin and mail-system pages render Turnstile on `afeonbooks.com` and `mailsystem.afeonbooks.com`, respectively, so add both exact hostnames to the widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostnames, no scheme or wildcard). Keep the customer sign-in hostnames used by the existing email flow in those lists too.
 
 Apply migrations 0003 through 0007 in sequence if they have not already been applied. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
 

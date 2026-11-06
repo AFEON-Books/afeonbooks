@@ -207,6 +207,8 @@ function App() {
   useImageProtection();
   useDevAudit();
   const isMailHost = window.location.hostname === "mailsystem.afeonbooks.com";
+  const isStaffAuthFlow = window.location.hostname === "authn.afeonbooks.com"
+    && new URLSearchParams(window.location.search).has("return_to");
   return (
     <QueryClientProvider client={queryClient}>
       <UtmProvider>
@@ -214,11 +216,11 @@ function App() {
         <CartProvider>
           <TooltipProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              {!isMailHost && <StatusBanner />}
+              {!isMailHost && !isStaffAuthFlow && <StatusBanner />}
               {isMailHost ? <MailSystemAccessGate><Router /></MailSystemAccessGate> : <Router />}
             </WouterRouter>
             <Toaster />
-            {!isMailHost && <CookieBanner />}
+            {!isMailHost && !isStaffAuthFlow && <CookieBanner />}
           </TooltipProvider>
         </CartProvider>
         </AuthProvider>

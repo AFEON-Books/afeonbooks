@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { authApiRequest, createAuthEntryUrl, useAuth, type User } from "@/lib/auth";
 import { formatPrice } from "@/lib/format";
 import { TurnstileWidget } from "@/components/turnstile-widget";
+import { StaffGithubSignIn } from "@/components/staff-github-sign-in";
 
 type MyOrder = {
   id: number;
@@ -37,7 +38,7 @@ function getAllowedReturnUrl(value: string | null): string | null {
   try {
     const target = new URL(value);
     const allowed = target.origin === "https://mailsystem.afeonbooks.com"
-      || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/infra"].includes(target.pathname))
+      || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname))
       || (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")));
     if (!allowed || target.username || target.password) {
       return null;
@@ -49,7 +50,7 @@ function getAllowedReturnUrl(value: string | null): string | null {
 }
 
 function AccountForm() {
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [step, setStep] = useState<"email" | "code" | "password" | "signup" | "forgot" | "verification">("email");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -151,11 +152,6 @@ function AccountForm() {
         </Button>
       </form>
 
-      {step === "email" ? (
-        <a href={`https://afeonbooks.com/api/auth/github/start?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`} className="block w-full border border-black/20 bg-white px-4 py-4 text-center text-xs font-bold uppercase tracking-widest hover:bg-black/[0.03]">
-          {user?.role === "staff" || user?.role === "admin" ? "Continue with GitHub" : "Sign in with GitHub"}
-        </a>
-      ) : null}
       {step === "code" && <button type="button" onClick={() => { setStep("password"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Login with Password</button>}
       {step === "password" && <button type="button" onClick={() => { setStep("forgot"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Forgot password?</button>}
       {step !== "email" && <button type="button" onClick={backToEmail} className="w-full text-sm text-black/55 underline underline-offset-4">Use a different email</button>}
@@ -330,7 +326,9 @@ export default function Account() {
   }, [isAuthEntry, isAuthHost, loading, user, hasTokenFlow]);
 
   const returnRequiresAdmin = returnTo
-    ? new URL(returnTo).hostname === "mailsystem.afeonbooks.com" || new URL(returnTo).hostname === "source.afeonbooks.com"
+    ? new URL(returnTo).hostname === "mailsystem.afeonbooks.com"
+      || new URL(returnTo).hostname === "source.afeonbooks.com"
+      || (new URL(returnTo).hostname === "afeonbooks.com" && new URL(returnTo).pathname.startsWith("/admin"))
     : false;
   const canReturn = user?.role === "admin" || (!returnRequiresAdmin && user?.role === "staff");
 
@@ -339,6 +337,21 @@ export default function Account() {
       window.location.replace(returnTo);
     }
   }, [canReturn, isAuthHost, loading, returnTo]);
+
+  if (isAuthHost && returnToParam !== null && !hasTokenFlow) {
+    if (loading) {
+      return <main className="flex min-h-screen items-center justify-center">Checking staff access…</main>;
+    }
+    if (!returnTo) {
+      return <main className="flex min-h-screen items-center justify-center px-6 text-center"><p className="max-w-md text-sm text-red-700">This sign-in destination is not allowed.</p></main>;
+    }
+    if (!user) {
+      return <StaffGithubSignIn returnUrl={returnTo} />;
+    }
+    if (canReturn) {
+      return <main className="flex min-h-screen items-center justify-center">Continuing…</main>;
+    }
+  }
 
   if (!loading && !user && !hasTokenFlow && !isAuthEntry) {
     return null;

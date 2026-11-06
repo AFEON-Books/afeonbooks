@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
@@ -93,7 +93,7 @@ function createGithubAuthorizationUrl(response: Response, credentials: { clientI
   authorizationUrl.search = new URLSearchParams({
     client_id: credentials.clientId,
     redirect_uri: GITHUB_CALLBACK_URL,
-    scope: "read:user read:org",
+    scope: "read:user user:email read:org",
     state,
   }).toString();
   return authorizationUrl.toString();
@@ -304,12 +304,29 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
   }
 
   let githubUser: { id: number; login: string };
+  let verifiedGithubEmails: string[];
   let organizationMembership: { state: string };
   try {
     githubUser = await githubApi<{ id: number; login: string }>("https://api.github.com/user", accessToken);
     if (!Number.isSafeInteger(githubUser.id) || typeof githubUser.login !== "string") {
       throw new Error("GitHub returned an invalid user profile");
     }
+    const githubEmails: unknown = await githubApi<unknown>("https://api.github.com/user/emails", accessToken);
+    if (!Array.isArray(githubEmails)) {
+      throw new Error("GitHub returned an invalid email list");
+    }
+    verifiedGithubEmails = githubEmails
+      .filter((entry): entry is { email: string; verified: true } => (
+        typeof entry === "object"
+        && entry !== null
+        && "email" in entry
+        && typeof entry.email === "string"
+        && "verified" in entry
+        && entry.verified === true
+      ))
+      .map(({ email }) => normalizeEmail(email))
+      .filter(Boolean);
+
     const membershipResponse = await fetch(
       `https://api.github.com/user/memberships/orgs/${encodeURIComponent(GITHUB_ORGANIZATION)}`,
       {
@@ -340,20 +357,30 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  const githubIdentityEmail = `github-${githubUser.id}@github.afeonbooks.invalid`;
-  const [user] = await db.insert(usersTable).values({
-    email: githubIdentityEmail,
-    passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
-    name: githubUser.login,
-    role: "staff",
-  }).onConflictDoUpdate({
-    target: usersTable.email,
-    set: { name: githubUser.login, role: "staff" },
-  }).returning();
-  if (!user) {
-    githubFailure(res, 500, "Unable to create your GitHub staff session. Please try again.");
+  if (verifiedGithubEmails.length === 0) {
+    githubFailure(res, 403, "Your GitHub account needs a verified email that matches an existing AFEON Books staff or admin account.");
     return;
   }
+
+  const matchingUsers = await db.select().from(usersTable)
+    .where(inArray(usersTable.email, verifiedGithubEmails))
+    .limit(2);
+  if (matchingUsers.length !== 1) {
+    githubFailure(
+      res,
+      403,
+      matchingUsers.length > 1
+        ? "Your GitHub account matches multiple AFEON Books accounts. Ask an administrator to review the account emails."
+        : "No existing AFEON Books account matches a verified email on your GitHub account. Sign in with the GitHub account associated with your admin email.",
+    );
+    return;
+  }
+  const [user] = matchingUsers;
+  if (user.role !== "staff" && user.role !== "admin") {
+    githubFailure(res, 403, "The matching AFEON Books account does not have staff or admin access.");
+    return;
+  }
+
   if (!await markSessionGithubOrganizationVerified(req, user.id, String(githubUser.id))) {
     await destroySession(req, res);
     await createSession(user.id, req, res, String(githubUser.id), new Date());

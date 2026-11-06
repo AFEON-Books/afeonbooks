@@ -256,14 +256,14 @@ async function getAdminUserFromSession(request) {
 }
 
 function githubOrganizationRedirect(request) {
-  const signInUrl = new URL("https://afeonbooks.com/api/auth/github/start");
+  const signInUrl = new URL("https://authn.afeonbooks.com/account");
   signInUrl.searchParams.set("return_to", request.url);
   return Response.redirect(signInUrl.toString(), 302);
 }
 
 function sourceAuthError(status, message) {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://afeonbooks.com/api/auth/github/start?return_to=https%3A%2F%2Fsource.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fsource.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
     {
       status,
       headers: {

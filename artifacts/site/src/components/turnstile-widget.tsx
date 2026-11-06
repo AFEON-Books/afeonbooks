@@ -32,9 +32,15 @@ function loadTurnstile(): Promise<TurnstileApi> {
     script.onload = () => {
       const turnstile = window.turnstile;
       if (turnstile) resolve(turnstile);
-      else reject(new Error("Turnstile unavailable"));
+      else {
+        turnstilePromise = undefined;
+        reject(new Error("Turnstile unavailable"));
+      }
     };
-    script.onerror = () => reject(new Error("Unable to load Turnstile"));
+    script.onerror = () => {
+      turnstilePromise = undefined;
+      reject(new Error("Unable to load Turnstile"));
+    };
     document.head.append(script);
   });
   return turnstilePromise;
@@ -43,16 +49,20 @@ function loadTurnstile(): Promise<TurnstileApi> {
 export function TurnstileWidget({
   action,
   onToken,
+  onError,
   resetKey,
 }: {
   action: string;
   onToken: (token: string) => void;
+  onError?: (message: string) => void;
   resetKey: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
   const onTokenRef = useRef(onToken);
+  const onErrorRef = useRef(onError);
   onTokenRef.current = onToken;
+  onErrorRef.current = onError;
 
   useEffect(() => {
     let cancelled = false;
@@ -63,9 +73,15 @@ export function TurnstileWidget({
         action,
         callback: (token) => onTokenRef.current(token),
         "expired-callback": () => onTokenRef.current(""),
-        "error-callback": () => onTokenRef.current(""),
+        "error-callback": () => {
+          onTokenRef.current("");
+          onErrorRef.current?.("The security check could not load. Close this check and try again.");
+        },
       });
-    }).catch(() => onTokenRef.current(""));
+    }).catch(() => {
+      onTokenRef.current("");
+      onErrorRef.current?.("The security check could not load. Close this check and try again.");
+    });
 
     return () => {
       cancelled = true;
