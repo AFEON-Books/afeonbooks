@@ -70,7 +70,7 @@ export function renderEmailPreview(v: EmailTemplateValues): string {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:24px 12px;">
 <tr><td align="center">
 <table role="presentation" width="815" cellpadding="0" cellspacing="0" style="max-width:815px;width:100%;background:#fff;border:1px solid #eee;border-top:14px solid ${accent};">
-<tr><td style="padding:30px 50px 0;"><img src="https://afeonbooks.com/afeonbooks-logo.png" width="100" height="100" alt="AFEON Books" style="display:block;width:100px;height:100px;object-fit:contain;border:0;"></td></tr>
+<tr><td style="padding:30px 50px 0;"><img src="https://msxfhfdeqxqvjuypcspm.supabase.co/storage/v1/object/public/photos/afeonbooks-logo.png" width="100" height="100" alt="AFEON Books" style="display:block;width:100px;height:100px;object-fit:contain;border:0;"></td></tr>
 <tr><td style="padding:16px 50px 16px;">
 <h1 style="margin:0;font-size:24px;line-height:1.3;font-weight:700;">${escapeHtml(heading)}</h1>
 <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333;">${introHtml}</p>
