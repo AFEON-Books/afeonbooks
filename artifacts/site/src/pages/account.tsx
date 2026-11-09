@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight, FileText, Gift, LogOut } from "lucide-react";
+import { ArrowRight, FileText, Gift, Github, LogOut } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Button } from "@/components/ui/button";
@@ -152,6 +152,15 @@ function AccountForm() {
         </Button>
       </form>
 
+      {step === "email" && (
+        <a
+          href={`https://authn.afeonbooks.com/account?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`}
+          className="flex w-full items-center justify-center gap-3 rounded-md bg-[#24292f] px-5 py-4 text-sm font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]"
+        >
+          <Github aria-hidden="true" size={20} />
+          Staff sign in with GitHub
+        </a>
+      )}
       {step === "code" && <button type="button" onClick={() => { setStep("password"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Login with Password</button>}
       {step === "password" && <button type="button" onClick={() => { setStep("forgot"); setError(""); setMessage(""); }} className="w-full text-sm text-black/55 underline underline-offset-4">Forgot password?</button>}
       {step !== "email" && <button type="button" onClick={backToEmail} className="w-full text-sm text-black/55 underline underline-offset-4">Use a different email</button>}
@@ -325,19 +334,6 @@ export default function Account() {
     }
   }, [isAuthEntry, isAuthHost, loading, user, hasTokenFlow]);
 
-  const returnRequiresAdmin = returnTo
-    ? new URL(returnTo).hostname === "mailsystem.afeonbooks.com"
-      || new URL(returnTo).hostname === "source.afeonbooks.com"
-      || (new URL(returnTo).hostname === "afeonbooks.com" && new URL(returnTo).pathname.startsWith("/admin"))
-    : false;
-  const canReturn = user?.role === "admin" || (!returnRequiresAdmin && user?.role === "staff");
-
-  useEffect(() => {
-    if (isAuthHost && returnTo && !loading && canReturn) {
-      window.location.replace(returnTo);
-    }
-  }, [canReturn, isAuthHost, loading, returnTo]);
-
   if (isAuthHost && returnToParam !== null && !hasTokenFlow) {
     if (loading) {
       return <main className="flex min-h-screen items-center justify-center">Checking staff access…</main>;
@@ -345,12 +341,7 @@ export default function Account() {
     if (!returnTo) {
       return <main className="flex min-h-screen items-center justify-center px-6 text-center"><p className="max-w-md text-sm text-red-700">This sign-in destination is not allowed.</p></main>;
     }
-    if (!user) {
-      return <StaffGithubSignIn returnUrl={returnTo} />;
-    }
-    if (canReturn) {
-      return <main className="flex min-h-screen items-center justify-center">Continuing…</main>;
-    }
+    return <StaffGithubSignIn returnUrl={returnTo} />;
   }
 
   if (!loading && !user && !hasTokenFlow && !isAuthEntry) {
@@ -376,15 +367,6 @@ export default function Account() {
           <AccountTokenHandler />
         ) : loading ? (
           <p className="text-black/50">Loading...</p>
-        ) : isAuthHost && returnToParam && !returnTo ? (
-          <p className="mx-auto mt-8 max-w-md text-sm text-red-700">This sign-in destination is not allowed.</p>
-        ) : isAuthHost && returnTo && user && !canReturn ? (
-          <div className="mx-auto mt-8 max-w-md text-center text-sm">
-            <p className="text-red-700">This page requires an administrator account.</p>
-            <Link href="/account" className="mt-3 inline-block underline underline-offset-4">
-              Sign out or switch accounts
-            </Link>
-          </div>
         ) : user ? (
           <>
             <div className="flex flex-col justify-between gap-6 border-y border-black/10 py-8 sm:flex-row sm:items-center">

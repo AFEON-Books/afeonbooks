@@ -363,7 +363,10 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
   }
 
   const matchingUsers = await db.select().from(usersTable)
-    .where(inArray(usersTable.email, verifiedGithubEmails))
+    .where(and(
+      inArray(usersTable.email, verifiedGithubEmails),
+      or(eq(usersTable.role, "staff"), eq(usersTable.role, "admin")),
+    ))
     .limit(2);
   if (matchingUsers.length !== 1) {
     githubFailure(
@@ -376,10 +379,6 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
     return;
   }
   const [user] = matchingUsers;
-  if (user.role !== "staff" && user.role !== "admin") {
-    githubFailure(res, 403, "The matching AFEON Books account does not have staff or admin access.");
-    return;
-  }
 
   if (!await markSessionGithubOrganizationVerified(req, user.id, String(githubUser.id))) {
     await destroySession(req, res);
