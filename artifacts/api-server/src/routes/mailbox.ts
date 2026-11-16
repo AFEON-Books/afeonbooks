@@ -99,7 +99,7 @@ function getMailboxOAuthCredentials(): { clientId?: string; clientSecret?: strin
 function getMailboxRedirectUri(): string {
   return process.env.ZOHO_MAILBOX_OAUTH_REDIRECT_URI
     || process.env.ZOHO_MAIL_OAUTH_REDIRECT_URI
-    || "https://api.afeonbooks.com/api/mail/auth/callback";
+    || "https://api-usw-2.afeonbooks.com/api/mail/auth/callback";
 }
 
 function getCurrentSessionHash(request: Request): string | undefined {
@@ -108,7 +108,7 @@ function getCurrentSessionHash(request: Request): string | undefined {
 }
 
 function requireMailboxOrigin(request: Request, response: Response, next: NextFunction): void {
-  const path = new URL(request.originalUrl, "https://api.afeonbooks.com").pathname;
+  const path = new URL(request.originalUrl, "https://api-usw-2.afeonbooks.com").pathname;
   if (path === "/api/mail/auth/callback") {
     next();
     return;

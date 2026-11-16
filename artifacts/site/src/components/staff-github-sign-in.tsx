@@ -64,7 +64,7 @@ export function StaffGithubSignIn({ returnUrl }: { returnUrl: string }) {
                 resetKey={turnstileResetKey}
               />
               {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-              <form ref={formRef} method="post" action="https://api.afeonbooks.com/api/auth/github/start">
+              <form ref={formRef} method="post" action="/api/auth/github/start">
                 <input ref={tokenInputRef} type="hidden" name="cf-turnstile-response" />
                 <input type="hidden" name="return_to" value={returnUrl} />
               </form>

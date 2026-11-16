@@ -366,7 +366,7 @@ export default function Dev() {
           <h2 className="text-xl font-bold">Environment</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div className="border border-black/10 p-4"><span className="text-black/40">Frontend</span><br/><span className="font-mono text-xs">Cloudflare Workers</span></div>
-            <div className="border border-black/10 p-4"><span className="text-black/40">API</span><br/><span className="font-mono text-xs">https://api.afeonbooks.com</span></div>
+            <div className="border border-black/10 p-4"><span className="text-black/40">API</span><br/><span className="font-mono text-xs">https://api-usw-2.afeonbooks.com</span></div>
             <div className="border border-black/10 p-4"><span className="text-black/40">Database</span><br/><span className="font-mono text-xs">Supabase PostgreSQL</span></div>
             <div className="border border-black/10 p-4"><span className="text-black/40">Render service</span><br/><span className="font-mono text-xs">srv-da57c6jbc2fs738388lg</span></div>
           </div>

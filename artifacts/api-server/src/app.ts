@@ -10,7 +10,7 @@ const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER
 const productionOrigins = new Set([
   "https://afeonbooks.com",
   "https://www.afeonbooks.com",
-  "https://api.afeonbooks.com",
+  "https://api-usw-2.afeonbooks.com",
   "https://authn.afeonbooks.com",
   "https://mailsystem.afeonbooks.com",
   "https://source.afeonbooks.com",

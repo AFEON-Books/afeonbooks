@@ -141,7 +141,7 @@ function MailSystemAccessGate({ children }: { children: React.ReactNode }) {
           <DialogTitle className="sr-only">Turnstile security check</DialogTitle>
           <DialogDescription className="sr-only">Complete the security check to continue to GitHub.</DialogDescription>
           <TurnstileWidget action="staff_github_login" onToken={handleTurnstileToken} resetKey={turnstileResetKey} />
-          <form ref={formRef} method="post" action="https://api.afeonbooks.com/api/auth/github/start">
+          <form ref={formRef} method="post" action="/api/auth/github/start">
             <input ref={tokenInputRef} type="hidden" name="cf-turnstile-response" />
             <input type="hidden" name="return_to" value={window.location.href} />
           </form>

@@ -8,7 +8,7 @@ import { requireRole, requireUser } from "../lib/auth";
 
 const router: IRouter = Router();
 const ZOHO_SCOPE = "ZohoMail.messages.CREATE,ZohoMail.accounts.READ";
-const ZOHO_DEFAULT_REDIRECT_URI = "https://api.afeonbooks.com/api/email/zoho-callback";
+const ZOHO_DEFAULT_REDIRECT_URI = "https://api-usw-2.afeonbooks.com/api/email/zoho-callback";
 
 router.get("/email/zoho-authorize", requireUser, requireRole("admin"), (req, res): void => {
   const clientId = process.env.ZOHO_CLIENT_ID;

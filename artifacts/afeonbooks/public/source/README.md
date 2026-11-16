@@ -56,7 +56,7 @@ pnpm --filter @workspace/site run dev
 Run the admin application in another terminal:
 
 ```bash
-API_URL=https://api.afeonbooks.com \
+API_URL=https://api-usw-2.afeonbooks.com \
 	pnpm --filter @workspace/admin run dev
 ```
 
@@ -91,10 +91,10 @@ Migration [`lib/db/migrations/0007_github_account_links.sql`](./lib/db/migration
 The canonical API origin is:
 
 ```text
-https://api.afeonbooks.com
+https://api-usw-2.afeonbooks.com
 ```
 
-The production Cloudflare Worker forwards `/api/*` requests from the main site to that origin. The previous Render API hostname should not be used.
+The production Cloudflare Worker forwards `/api/*` requests to that origin and retries against the failover API at `https://use-2.afeonbooks.com` when the primary request encounters a network error or a 5xx response. Client errors are returned without retrying.
 
 ## Private Mail System
 
@@ -103,7 +103,7 @@ The mailbox app is served at `https://mailsystem.afeonbooks.com` by the Cloudfla
 Use `ZOHO_MAILBOX_` variables for mailbox OAuth and configuration; `ZOHO_` variables without that prefix remain for transactional email sending. Existing deployments can continue using the previous names as fallbacks, but should migrate to the mailbox-prefixed names.
 
 - `ZOHO_MAILBOX_CLIENT_ID` and `ZOHO_MAILBOX_CLIENT_SECRET` from the mailbox Zoho OAuth client.
-- `ZOHO_MAILBOX_OAUTH_REDIRECT_URI=https://api.afeonbooks.com/api/mail/auth/callback`, registered exactly in the Zoho OAuth client.
+- `ZOHO_MAILBOX_OAUTH_REDIRECT_URI=https://api-usw-2.afeonbooks.com/api/mail/auth/callback`, registered exactly in the Zoho OAuth client.
 - `ZOHO_MAILBOX_ACCOUNTS_URL` and `ZOHO_MAILBOX_API_URL` for the Zoho data center that hosts the mailbox (defaults target the `.com` data center).
 - `ZOHO_MAILBOX_ACCOUNT_ID` or `ZOHO_MAILBOX_AUTHENTICATED_USER` to select the intended mailbox when the Zoho account has multiple mailboxes.
 - `MAIL_TOKEN_ENCRYPTION_KEY`, a base64-encoded random 32-byte key. Generate it with `openssl rand -base64 32`; keep it only in Render's secret environment and back it up securely because losing it prevents decrypting saved mailbox credentials.
@@ -117,13 +117,13 @@ The first authorization requests Zoho account/folder read and message read/creat
 Admin, mailbox, and source dashboard access use GitHub OAuth directly; Cloudflare Access is not used. Configure a GitHub OAuth App with:
 
 - **Homepage URL:** `https://afeonbooks.com`
-- **Authorization callback URL:** `https://api.afeonbooks.com/api/auth/github/callback`
+- **Authorization callback URL:** `https://api-usw-2.afeonbooks.com/api/auth/github/callback`
 
 Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user`, `user:email`, and `read:org`. Sign-in requires active membership in the configured organization and a verified GitHub email that exactly matches an existing AFEON Books staff or admin account. The API never creates or promotes an account during GitHub sign-in; it preserves the matching database user's name, email, and role. Every protected-page entry requires a fresh GitHub OAuth sign-in, which also rechecks organization membership. The GitHub sign-in UI requires Turnstile (`staff_github_login` action); after success it opens the GitHub authorization flow in a new tab. Removing someone from the organization prevents further sign-ins. The admin and mail-system pages render Turnstile on `afeonbooks.com` and `mailsystem.afeonbooks.com`, respectively, so add both exact hostnames to the widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostnames, no scheme or wildcard). Keep the customer sign-in hostnames used by the existing email flow in those lists too.
 
 Apply migrations 0003 through 0007 in sequence if they have not already been applied. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
 
-Set `MAINTENANCE_KEY` as a secret environment variable on the API service. Direct maintenance toggles use `https://api.afeonbooks.com/api/maintenance/off?key=<MAINTENANCE_KEY>` or `/api/maintenance/on?key=<MAINTENANCE_KEY>`. Choose a long random value and do not commit it or share the full URL; the key is required and there is no default.
+Set `MAINTENANCE_KEY` as a secret environment variable on the API service. Direct maintenance toggles use `https://api-usw-2.afeonbooks.com/api/maintenance/off?key=<MAINTENANCE_KEY>` or `/api/maintenance/on?key=<MAINTENANCE_KEY>`. Choose a long random value and do not commit it or share the full URL; the key is required and there is no default.
 
 Add `AUTH_CODE_PEPPER` as a random secret environment variable on the API service. Do not commit it. The API uses it to HMAC email login codes and rate-limit keys.
 

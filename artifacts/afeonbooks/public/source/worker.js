@@ -1,8 +1,35 @@
+const API_ORIGINS = [
+  "https://api-usw-2.afeonbooks.com",
+  "https://use-2.afeonbooks.com",
+];
+
+async function fetchApiRequest(request, timeoutMs = 0) {
+  const requestUrl = new URL(request.url);
+
+  for (let index = 0; index < API_ORIGINS.length; index += 1) {
+    const apiUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, API_ORIGINS[index]);
+    let response;
+    try {
+      const apiRequest = new Request(apiUrl, request.clone());
+      response = timeoutMs
+        ? await fetch(apiRequest, { signal: AbortSignal.timeout(timeoutMs) })
+        : await fetch(apiRequest);
+    } catch (error) {
+      if (index === API_ORIGINS.length - 1) throw error;
+      continue;
+    }
+
+    if (response.status < 500 || index === API_ORIGINS.length - 1) return response;
+    await response.body?.cancel();
+  }
+
+  throw new Error("No API origin available");
+}
+
 async function isMaintenanceMode() {
-  const response = await fetch("https://api.afeonbooks.com/api/maintenance/status", {
+  const response = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/maintenance/status", {
     headers: { Accept: "application/json", "Cache-Control": "no-cache" },
-    signal: AbortSignal.timeout(5000),
-  });
+  }), 5000);
   if (!response.ok) {
     throw new Error(`Maintenance status check failed with status ${response.status}`);
   }
@@ -86,9 +113,9 @@ function makePdf(lines) {
 
 async function getCheckoutFieldLabels() {
   try {
-    const response = await fetch("https://api.afeonbooks.com/api/content", {
+    const response = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/content", {
       headers: { Accept: "application/json" },
-    });
+    }));
     if (!response.ok) {
       console.error("Unable to load checkout field labels for order PDF", response.status);
       return new Map();
@@ -108,13 +135,13 @@ async function getCheckoutFieldLabels() {
 }
 
 async function orderPdfResponse(request, orderId) {
-  const apiUrl = new URL(`https://api.afeonbooks.com/api/orders/${encodeURIComponent(orderId)}`);
+  const apiUrl = new URL(`https://api-usw-2.afeonbooks.com/api/orders/${encodeURIComponent(orderId)}`);
   const headers = new Headers({ Accept: "application/json" });
   const accessToken = request.headers.get("X-Order-Access-Token");
   const cookie = request.headers.get("Cookie");
   if (accessToken) headers.set("X-Order-Access-Token", accessToken);
   if (cookie) headers.set("Cookie", cookie);
-  const apiResponse = await fetch(new Request(apiUrl, { method: "GET", headers }));
+  const apiResponse = await fetchApiRequest(new Request(apiUrl, { method: "GET", headers }));
 
   if (!apiResponse.ok) {
     return new Response(apiResponse.status === 404 ? "Order not found" : "Unable to load order", {
@@ -227,10 +254,10 @@ async function getAdminUserFromSession(request) {
   const cookie = request.headers.get("Cookie");
   const headers = new Headers({ Accept: "application/json" });
   if (cookie) headers.set("Cookie", cookie);
-  const sessionResponse = await fetch("https://api.afeonbooks.com/api/auth/me", {
+  const sessionResponse = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/auth/me", {
     headers,
     redirect: "manual",
-  });
+  }));
   if (!sessionResponse.ok) {
     throw new Error(`Account session check failed with status ${sessionResponse.status}`);
   }
@@ -243,10 +270,10 @@ async function getAdminUserFromSession(request) {
     return { user, organizationVerified: false };
   }
 
-  const accessResponse = await fetch("https://api.afeonbooks.com/api/auth/admin/access", {
+  const accessResponse = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/auth/admin/access", {
     headers,
     redirect: "manual",
-  });
+  }));
   if (accessResponse.status === 401) return { user: null, organizationVerified: false };
   if (accessResponse.status === 403) return { user, organizationVerified: false };
   if (!accessResponse.ok) {
@@ -537,8 +564,7 @@ if (url.hostname === "source.afeonbooks.com") {
 
 if (url.hostname === "authn.afeonbooks.com") {
   if (path.startsWith("/api/")) {
-    const apiUrl = new URL(`https://api.afeonbooks.com${path}${url.search}`);
-    return fetch(new Request(apiUrl, request));
+    return fetchApiRequest(request);
   }
 
   if (path === "/" || path === "/account" || path === "/account/" || /^\/(?:sign-in|account-check)\/[a-f0-9]{32}$/.test(path)) {
@@ -549,8 +575,7 @@ if (url.hostname === "authn.afeonbooks.com") {
 }
 
     if (path.startsWith("/api/")) {
-      const apiUrl = new URL(`https://api.afeonbooks.com${path}${url.search}`);
-      return fetch(new Request(apiUrl, request));
+      return fetchApiRequest(request);
     }
 
     const isAdminRoute = path === "/admin" || path.startsWith("/admin/");

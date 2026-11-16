@@ -12,7 +12,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const basePath = process.env.BASE_PATH ?? "/admin/";
-const apiProxyTarget = process.env.API_URL ?? "https://api.afeonbooks.com";
+const apiProxyTarget = process.env.API_URL ?? "https://api-usw-2.afeonbooks.com";
 
 export default defineConfig({
   base: basePath,
