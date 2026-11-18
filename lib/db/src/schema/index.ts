@@ -4,3 +4,4 @@ export * from "./orders";
 export * from "./auth";
 export * from "./mail";
 export * from "./marketing";
+export * from "./chat";

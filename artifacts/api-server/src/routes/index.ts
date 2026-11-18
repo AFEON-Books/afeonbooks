@@ -12,6 +12,7 @@ import authRouter from "./auth";
 import devEventsRouter from "./dev-events";
 import marketingRouter from "./marketing";
 import mailboxRouter from "./mailbox";
+import chatRouter from "./chat";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(authRouter);
 router.use(devEventsRouter);
 router.use(marketingRouter);
 router.use(mailboxRouter);
+router.use(chatRouter);
 
 export default router;

@@ -139,7 +139,10 @@ export async function destroySession(request: Request, response: Response): Prom
 }
 
 export async function loadUser(request: Request): Promise<UserRow | undefined> {
-  const token = request.cookies?.[SESSION_COOKIE];
+  return loadUserFromSessionToken(request.cookies?.[SESSION_COOKIE]);
+}
+
+export async function loadUserFromSessionToken(token: string | undefined): Promise<UserRow | undefined> {
   if (!token) return undefined;
   const rows = await db
     .select({ user: usersTable })
@@ -148,6 +151,22 @@ export async function loadUser(request: Request): Promise<UserRow | undefined> {
     .where(and(eq(sessionsTable.tokenHash, hashSessionToken(token)), gt(sessionsTable.expiresAt, new Date())))
     .limit(1);
   return rows[0]?.user;
+}
+
+export async function loadStaffUserFromSessionToken(token: string | undefined): Promise<UserRow | undefined> {
+  const user = await loadUserFromSessionToken(token);
+  if (!user || !["staff", "admin"].includes(user.role ?? "customer")) return undefined;
+  if (!IS_PRODUCTION) return user;
+
+  const [session] = await db.select({ githubUserId: sessionsTable.githubUserId })
+    .from(sessionsTable)
+    .where(and(
+      eq(sessionsTable.tokenHash, hashSessionToken(token!)),
+      eq(sessionsTable.userId, user.id),
+      gt(sessionsTable.expiresAt, new Date()),
+    ))
+    .limit(1);
+  return session?.githubUserId ? user : undefined;
 }
 
 export async function markSessionGithubOrganizationVerified(request: Request, userId: number, githubUserId: string): Promise<boolean> {

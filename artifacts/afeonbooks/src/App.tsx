@@ -4,6 +4,7 @@ import { Router, Route, Switch, Link } from "wouter";
 import { StaffDashboard } from "./StaffDashboard";
 import { POSCheckout } from "./POSCheckout";
 import { SalesDashboard } from "./SalesDashboard";
+import { ChatWidget } from "../../admin/src/components/ChatWidget";
 
 const queryClient = new QueryClient();
 
@@ -460,6 +461,7 @@ function App() {
           <Route path="/admin" component={StaffDashboard} />
           <Route component={PickupApp} />
         </Switch>
+        <ChatWidget />
       </Router>
     </QueryClientProvider>
   );

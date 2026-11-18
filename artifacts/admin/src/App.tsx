@@ -9,6 +9,7 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Github } from "lucide-react";
 import { Toaster } from "sonner";
+import { ChatWidget } from "@/components/ChatWidget";
 import {
   Dialog,
   DialogContent,
@@ -950,6 +951,7 @@ function App() {
             </AdminAccessGate>
           </WouterRouter>
         )}
+        <ChatWidget />
         <Toaster position="top-center" richColors />
       </TooltipProvider>
     </QueryClientProvider>
