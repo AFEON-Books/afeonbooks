@@ -7,6 +7,7 @@
  */
 import type { SiteContentCheckoutFieldsItem } from "./siteContentCheckoutFieldsItem";
 import type { SiteContentFaqsItem } from "./siteContentFaqsItem";
+import type { SiteContentHomeCustomSectionsItem } from "./siteContentHomeCustomSectionsItem";
 import type { SiteContentSchool } from "./siteContentSchool";
 import type { SiteContentShippingAddressesItem } from "./siteContentShippingAddressesItem";
 
@@ -28,6 +29,8 @@ export interface SiteContent {
   illustratorLine: string;
   footerNote: string;
   accentColor: string;
+  homeSectionOrder: string[];
+  homeCustomSections: SiteContentHomeCustomSectionsItem[];
   defaultShippingLabel: string;
   defaultShippingAddress: string;
   defaultShippingCity: string;

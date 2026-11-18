@@ -7,11 +7,29 @@ import { requireRole, requireUser } from "../lib/auth";
 const router: IRouter = Router();
 
 const DEFAULT_FAQS = [
-  { question: "How do I place an order?", answer: "Browse the shop, add an available item to your cart, and continue to checkout when you are ready." },
-  { question: "How can I check my cart?", answer: "Select the shopping bag in the header to open your cart and review its contents." },
-  { question: "What does it mean if an item is out of stock?", answer: "Items marked out of stock cannot currently be added to your cart." },
-  { question: "Where can I learn more about the book?", answer: "The About section on the home page has more information about the book and its creators." },
-  { question: "How do I access my account?", answer: "Choose Sign in in the header to open the account page." },
+  {
+    question: "How do I place an order?",
+    answer:
+      "Browse the shop, add an available item to your cart, and continue to checkout when you are ready.",
+  },
+  {
+    question: "How can I check my cart?",
+    answer:
+      "Select the shopping bag in the header to open your cart and review its contents.",
+  },
+  {
+    question: "What does it mean if an item is out of stock?",
+    answer: "Items marked out of stock cannot currently be added to your cart.",
+  },
+  {
+    question: "Where can I learn more about the book?",
+    answer:
+      "The About section on the home page has more information about the book and its creators.",
+  },
+  {
+    question: "How do I access my account?",
+    answer: "Choose Sign in in the header to open the account page.",
+  },
 ];
 
 const DEFAULT_CONTENT = {
@@ -31,6 +49,8 @@ const DEFAULT_CONTENT = {
   illustratorLine: "Janis Vong",
   footerNote: "© 2026 AFR Group. All Rights Reserved.",
   accentColor: "#E2553B",
+  homeSectionOrder: JSON.stringify(["hero", "shop", "about", "faq"]),
+  homeCustomSections: "[]",
   defaultShippingLabel: "School Delivery",
   defaultShippingAddress: "",
   defaultShippingCity: "",
@@ -43,7 +63,8 @@ const DEFAULT_CONTENT = {
   blogSubtitle: "A look inside the latest adventure from the AFEON Books team.",
   blogDate: "September 15, 2026",
   blogHeroImageUrl: "",
-  blogBody: "We are back at the writing table, building the next mystery one clue at a time.\n\nBook 6 is taking shape with bigger questions, stranger discoveries, and a brand-new trail for our detectives to follow. We cannot wait to share more soon.",
+  blogBody:
+    "We are back at the writing table, building the next mystery one clue at a time.\n\nBook 6 is taking shape with bigger questions, stranger discoveries, and a brand-new trail for our detectives to follow. We cannot wait to share more soon.",
 };
 
 export function serializeContent(row: SiteContentRow) {
@@ -62,9 +83,9 @@ export function serializeContent(row: SiteContentRow) {
   }));
   const legacyAddressConfigured = Boolean(
     row.defaultShippingAddress &&
-      row.defaultShippingCity &&
-      row.defaultShippingPostalCode &&
-      row.defaultShippingCountry,
+    row.defaultShippingCity &&
+    row.defaultShippingPostalCode &&
+    row.defaultShippingCountry,
   );
   return {
     id: row.id,
@@ -83,24 +104,31 @@ export function serializeContent(row: SiteContentRow) {
     illustratorLine: row.illustratorLine,
     footerNote: row.footerNote,
     accentColor: row.accentColor,
+    homeSectionOrder: JSON.parse(
+      row.homeSectionOrder || '["hero","shop","about","faq"]',
+    ),
+    homeCustomSections: JSON.parse(row.homeCustomSections || "[]"),
     defaultShippingLabel: row.defaultShippingLabel,
     defaultShippingAddress: row.defaultShippingAddress,
     defaultShippingCity: row.defaultShippingCity,
     defaultShippingPostalCode: row.defaultShippingPostalCode,
     defaultShippingCountry: row.defaultShippingCountry,
-    shippingAddresses: shippingAddresses.length > 0
-      ? shippingAddresses
-      : legacyAddressConfigured
-        ? [{
-            id: "legacy-default",
-            label: row.defaultShippingLabel || "School Delivery",
-            address: row.defaultShippingAddress,
-            city: row.defaultShippingCity,
-            postalCode: row.defaultShippingPostalCode,
-            country: row.defaultShippingCountry,
-            shippingFeeCents: 0,
-          }]
-        : [],
+    shippingAddresses:
+      shippingAddresses.length > 0
+        ? shippingAddresses
+        : legacyAddressConfigured
+          ? [
+              {
+                id: "legacy-default",
+                label: row.defaultShippingLabel || "School Delivery",
+                address: row.defaultShippingAddress,
+                city: row.defaultShippingCity,
+                postalCode: row.defaultShippingPostalCode,
+                country: row.defaultShippingCountry,
+                shippingFeeCents: 0,
+              },
+            ]
+          : [],
     loyaltyPagesPerDollar: Number(row.loyaltyPagesPerDollar),
     ordersEnabled: row.ordersEnabled === "true",
     emailEnabled: row.emailEnabled === "true",
@@ -145,8 +173,44 @@ router.get("/content", async (_req, res) => {
 
 router.put("/content", requireUser, requireRole("admin"), async (req, res) => {
   const body = UpdateContentBody.parse(req.body);
+  const customSectionIds = body.homeCustomSections.map((section) => section.id);
+  const allowedSections = new Set([
+    "hero",
+    "shop",
+    "about",
+    "faq",
+    ...customSectionIds,
+  ]);
+  const customCodeSize = body.homeCustomSections.reduce(
+    (total, section) =>
+      total + section.html.length + section.css.length + section.js.length,
+    0,
+  );
+  if (
+    body.homeCustomSections.length > 10 ||
+    customCodeSize > 50_000 ||
+    customSectionIds.some((id) => !id.startsWith("custom-")) ||
+    new Set(customSectionIds).size !== customSectionIds.length ||
+    body.homeSectionOrder.length !== allowedSections.size ||
+    new Set(body.homeSectionOrder).size !== body.homeSectionOrder.length ||
+    body.homeSectionOrder.some((section) => !allowedSections.has(section))
+  ) {
+    res
+      .status(400)
+      .json({ error: "Invalid homepage section layout or custom code size" });
+    return;
+  }
   const current = await getOrCreateContent();
-  const { ordersEnabled, emailEnabled, checkoutFields, loyaltyPagesPerDollar, faqs, ...rest } = body;
+  const {
+    ordersEnabled,
+    emailEnabled,
+    checkoutFields,
+    loyaltyPagesPerDollar,
+    faqs,
+    homeSectionOrder,
+    homeCustomSections,
+    ...rest
+  } = body;
   const updated = await db
     .update(siteContentTable)
     .set({
@@ -155,10 +219,14 @@ router.put("/content", requireUser, requireRole("admin"), async (req, res) => {
       emailEnabled: emailEnabled ? "true" : "false",
       checkoutFields: JSON.stringify(checkoutFields ?? []),
       ...(faqs !== undefined ? { faqs: JSON.stringify(faqs) } : {}),
-      shippingAddresses: JSON.stringify((body.shippingAddresses ?? []).map((address) => ({
-        ...address,
-        shippingFeeCents: address.shippingFeeCents ?? 0,
-      }))),
+      homeSectionOrder: JSON.stringify(homeSectionOrder),
+      homeCustomSections: JSON.stringify(homeCustomSections),
+      shippingAddresses: JSON.stringify(
+        (body.shippingAddresses ?? []).map((address) => ({
+          ...address,
+          shippingFeeCents: address.shippingFeeCents ?? 0,
+        })),
+      ),
       loyaltyPagesPerDollar: String(loyaltyPagesPerDollar ?? 50),
       ...(body.shippingAddresses !== undefined
         ? {

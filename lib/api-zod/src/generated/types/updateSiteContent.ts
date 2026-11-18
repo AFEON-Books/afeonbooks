@@ -7,6 +7,7 @@
  */
 import type { UpdateSiteContentCheckoutFieldsItem } from "./updateSiteContentCheckoutFieldsItem";
 import type { UpdateSiteContentFaqsItem } from "./updateSiteContentFaqsItem";
+import type { UpdateSiteContentHomeCustomSectionsItem } from "./updateSiteContentHomeCustomSectionsItem";
 import type { UpdateSiteContentShippingAddressesItem } from "./updateSiteContentShippingAddressesItem";
 
 export interface UpdateSiteContent {
@@ -25,6 +26,8 @@ export interface UpdateSiteContent {
   illustratorLine: string;
   footerNote: string;
   accentColor: string;
+  homeSectionOrder: string[];
+  homeCustomSections: UpdateSiteContentHomeCustomSectionsItem[];
   defaultShippingLabel: string;
   defaultShippingAddress: string;
   defaultShippingCity: string;

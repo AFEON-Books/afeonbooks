@@ -12,37 +12,75 @@ export const siteContentTable = pgTable("site_content", {
   coverImageUrl: text("cover_image_url").notNull(),
   aboutHeading: text("about_heading").notNull(),
   aboutBody: text("about_body").notNull(),
-  faqs: text("faqs").notNull().default('[{"question":"How do I place an order?","answer":"Browse the shop, add an available item to your cart, and continue to checkout when you are ready."},{"question":"How can I check my cart?","answer":"Select the shopping bag in the header to open your cart and review its contents."},{"question":"What does it mean if an item is out of stock?","answer":"Items marked out of stock cannot currently be added to your cart."},{"question":"Where can I learn more about the book?","answer":"The About section on the home page has more information about the book and its creators."},{"question":"How do I access my account?","answer":"Choose Sign in in the header to open the account page."}]'),
+  faqs: text("faqs")
+    .notNull()
+    .default(
+      '[{"question":"How do I place an order?","answer":"Browse the shop, add an available item to your cart, and continue to checkout when you are ready."},{"question":"How can I check my cart?","answer":"Select the shopping bag in the header to open your cart and review its contents."},{"question":"What does it mean if an item is out of stock?","answer":"Items marked out of stock cannot currently be added to your cart."},{"question":"Where can I learn more about the book?","answer":"The About section on the home page has more information about the book and its creators."},{"question":"How do I access my account?","answer":"Choose Sign in in the header to open the account page."}]',
+    ),
   authorsLine: text("authors_line").notNull(),
   illustratorLine: text("illustrator_line").notNull(),
   footerNote: text("footer_note").notNull(),
   accentColor: text("accent_color").notNull(),
+  homeSectionOrder: text("home_section_order")
+    .notNull()
+    .default('["hero","shop","about","faq"]'),
+  homeCustomSections: text("home_custom_sections").notNull().default("[]"),
   defaultShippingLabel: text("default_shipping_label").notNull().default(""),
-  defaultShippingAddress: text("default_shipping_address").notNull().default(""),
+  defaultShippingAddress: text("default_shipping_address")
+    .notNull()
+    .default(""),
   defaultShippingCity: text("default_shipping_city").notNull().default(""),
-  defaultShippingPostalCode: text("default_shipping_postal_code").notNull().default(""),
-  defaultShippingCountry: text("default_shipping_country").notNull().default(""),
+  defaultShippingPostalCode: text("default_shipping_postal_code")
+    .notNull()
+    .default(""),
+  defaultShippingCountry: text("default_shipping_country")
+    .notNull()
+    .default(""),
   shippingAddresses: text("shipping_addresses").notNull().default("[]"),
-  loyaltyPagesPerDollar: text("loyalty_pages_per_dollar").notNull().default("50"),
+  loyaltyPagesPerDollar: text("loyalty_pages_per_dollar")
+    .notNull()
+    .default("50"),
   ordersEnabled: text("orders_enabled").notNull().default("true"),
   maintenanceMode: text("maintenance_mode").notNull().default("false"),
   emailEnabled: text("email_enabled").notNull().default("false"),
   emailFromName: text("email_from_name").notNull().default("AFEON Books"),
-  emailFromAddress: text("email_from_address").notNull().default("onboarding@resend.dev"),
+  emailFromAddress: text("email_from_address")
+    .notNull()
+    .default("onboarding@resend.dev"),
   emailReplyTo: text("email_reply_to").notNull().default(""),
-  emailSubject: text("email_subject").notNull().default("Your order #{{orderId}} is confirmed!"),
-  emailHeading: text("email_heading").notNull().default("Thank you for your order!"),
-  emailIntro: text("email_intro").notNull().default("Hi {{customerName}},\n\nThanks for ordering from AFEON Books! Your order #{{orderId}} has been received and is being prepared. You'll pay {{total}} in cash on delivery."),
-  emailButtonLabel: text("email_button_label").notNull().default("View your order"),
-  emailFooter: text("email_footer").notNull().default("Questions about your order? Just reply to this email."),
+  emailSubject: text("email_subject")
+    .notNull()
+    .default("Your order #{{orderId}} is confirmed!"),
+  emailHeading: text("email_heading")
+    .notNull()
+    .default("Thank you for your order!"),
+  emailIntro: text("email_intro")
+    .notNull()
+    .default(
+      "Hi {{customerName}},\n\nThanks for ordering from AFEON Books! Your order #{{orderId}} has been received and is being prepared. You'll pay {{total}} in cash on delivery.",
+    ),
+  emailButtonLabel: text("email_button_label")
+    .notNull()
+    .default("View your order"),
+  emailFooter: text("email_footer")
+    .notNull()
+    .default("Questions about your order? Just reply to this email."),
   emailAccentColor: text("email_accent_color").notNull().default("#7DD3EA"),
   checkoutFields: text("checkout_fields").notNull().default("[]"),
   blogTitle: text("blog_title").notNull().default("Progress Update"),
-  blogSubtitle: text("blog_subtitle").notNull().default("A look inside the latest adventure from the AFEON Books team."),
+  blogSubtitle: text("blog_subtitle")
+    .notNull()
+    .default("A look inside the latest adventure from the AFEON Books team."),
   blogDate: text("blog_date").notNull().default("September 15, 2026"),
   blogHeroImageUrl: text("blog_hero_image_url").notNull().default(""),
-  blogBody: text("blog_body").notNull().default("We are back at the writing table, building the next mystery one clue at a time.\n\nThe next book is taking shape with bigger questions, stranger discoveries, and a brand-new trail for our detectives to follow. We cannot wait to share more soon."),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  blogBody: text("blog_body")
+    .notNull()
+    .default(
+      "We are back at the writing table, building the next mystery one clue at a time.\n\nThe next book is taking shape with bigger questions, stranger discoveries, and a brand-new trail for our detectives to follow. We cannot wait to share more soon.",
+    ),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export type SiteContentRow = typeof siteContentTable.$inferSelect;

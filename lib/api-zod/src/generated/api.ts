@@ -15,6 +15,16 @@ export const GetContentQueryParams = zod.object({
   school: zod.enum(["alvarado", "shelyn"]).optional(),
 });
 
+export const getContentResponseHomeCustomSectionsItemIdMax = 80;
+
+export const getContentResponseHomeCustomSectionsItemNameMax = 80;
+
+export const getContentResponseHomeCustomSectionsItemHtmlMax = 20000;
+
+export const getContentResponseHomeCustomSectionsItemCssMax = 20000;
+
+export const getContentResponseHomeCustomSectionsItemJsMax = 20000;
+
 export const getContentResponseShippingAddressesItemShippingFeeCentsMin = 0;
 
 export const getContentResponseLoyaltyPagesPerDollarMin = 0;
@@ -49,6 +59,22 @@ export const GetContentResponse = zod.object({
   illustratorLine: zod.string(),
   footerNote: zod.string(),
   accentColor: zod.string(),
+  homeSectionOrder: zod.array(zod.string()),
+  homeCustomSections: zod.array(
+    zod.object({
+      id: zod
+        .string()
+        .min(1)
+        .max(getContentResponseHomeCustomSectionsItemIdMax),
+      name: zod
+        .string()
+        .min(1)
+        .max(getContentResponseHomeCustomSectionsItemNameMax),
+      html: zod.string().max(getContentResponseHomeCustomSectionsItemHtmlMax),
+      css: zod.string().max(getContentResponseHomeCustomSectionsItemCssMax),
+      js: zod.string().max(getContentResponseHomeCustomSectionsItemJsMax),
+    }),
+  ),
   defaultShippingLabel: zod.string(),
   defaultShippingAddress: zod.string(),
   defaultShippingCity: zod.string(),
@@ -94,6 +120,16 @@ export const UpdateContentQueryParams = zod.object({
   school: zod.enum(["alvarado", "shelyn"]).optional(),
 });
 
+export const updateContentBodyHomeCustomSectionsItemIdMax = 80;
+
+export const updateContentBodyHomeCustomSectionsItemNameMax = 80;
+
+export const updateContentBodyHomeCustomSectionsItemHtmlMax = 20000;
+
+export const updateContentBodyHomeCustomSectionsItemCssMax = 20000;
+
+export const updateContentBodyHomeCustomSectionsItemJsMax = 20000;
+
 export const updateContentBodyShippingAddressesItemShippingFeeCentsMin = 0;
 
 export const updateContentBodyLoyaltyPagesPerDollarMin = 0;
@@ -130,6 +166,19 @@ export const UpdateContentBody = zod.object({
   illustratorLine: zod.string(),
   footerNote: zod.string(),
   accentColor: zod.string(),
+  homeSectionOrder: zod.array(zod.string()),
+  homeCustomSections: zod.array(
+    zod.object({
+      id: zod.string().min(1).max(updateContentBodyHomeCustomSectionsItemIdMax),
+      name: zod
+        .string()
+        .min(1)
+        .max(updateContentBodyHomeCustomSectionsItemNameMax),
+      html: zod.string().max(updateContentBodyHomeCustomSectionsItemHtmlMax),
+      css: zod.string().max(updateContentBodyHomeCustomSectionsItemCssMax),
+      js: zod.string().max(updateContentBodyHomeCustomSectionsItemJsMax),
+    }),
+  ),
   defaultShippingLabel: zod.string(),
   defaultShippingAddress: zod.string(),
   defaultShippingCity: zod.string(),
@@ -173,6 +222,16 @@ export const UpdateContentBody = zod.object({
   blogBody: zod.string(),
 });
 
+export const updateContentResponseHomeCustomSectionsItemIdMax = 80;
+
+export const updateContentResponseHomeCustomSectionsItemNameMax = 80;
+
+export const updateContentResponseHomeCustomSectionsItemHtmlMax = 20000;
+
+export const updateContentResponseHomeCustomSectionsItemCssMax = 20000;
+
+export const updateContentResponseHomeCustomSectionsItemJsMax = 20000;
+
 export const updateContentResponseShippingAddressesItemShippingFeeCentsMin = 0;
 
 export const updateContentResponseLoyaltyPagesPerDollarMin = 0;
@@ -207,6 +266,24 @@ export const UpdateContentResponse = zod.object({
   illustratorLine: zod.string(),
   footerNote: zod.string(),
   accentColor: zod.string(),
+  homeSectionOrder: zod.array(zod.string()),
+  homeCustomSections: zod.array(
+    zod.object({
+      id: zod
+        .string()
+        .min(1)
+        .max(updateContentResponseHomeCustomSectionsItemIdMax),
+      name: zod
+        .string()
+        .min(1)
+        .max(updateContentResponseHomeCustomSectionsItemNameMax),
+      html: zod
+        .string()
+        .max(updateContentResponseHomeCustomSectionsItemHtmlMax),
+      css: zod.string().max(updateContentResponseHomeCustomSectionsItemCssMax),
+      js: zod.string().max(updateContentResponseHomeCustomSectionsItemJsMax),
+    }),
+  ),
   defaultShippingLabel: zod.string(),
   defaultShippingAddress: zod.string(),
   defaultShippingCity: zod.string(),

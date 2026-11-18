@@ -210,6 +210,7 @@ function maintenanceResponse() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg">
   <style>
     body { display: flex; flex-direction: column; width: 100%; height: 100vh; height: 100dvh; margin: 0; background: #101827; text-align: center; }
     .status-banner { flex: 0 0 auto; display: block; padding: 12px 20px; background: #9d2f20; color: #fff; font: 600 16px/1.5 system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
@@ -290,7 +291,7 @@ function githubOrganizationRedirect(request) {
 
 function sourceAuthError(status, message) {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fusw-2.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fusw-2.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
     {
       status,
       headers: {
@@ -343,6 +344,7 @@ function sourceDashboardHtml() {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg">
     <title>AFEON Books Infrastructure</title>
     <style>
       :root {
@@ -507,6 +509,7 @@ function adminHubHtml() {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg">
     <title>AFEON Books Admin</title>
     <style>
       :root {
@@ -605,7 +608,7 @@ function directoryHtml(files, key, selectedFile = "") {
   }
   const link = (file) => `/directory/file/${file.split("/").map(encodeURIComponent).join("/")}?key=${encodeURIComponent(key)}`;
   const tree = [...folders.entries()].map(([folder, folderFiles]) => `<section><h2>${escapeHtml(folder === "." ? "Root" : folder)}</h2><ul>${folderFiles.map((file) => `<li><a href="${escapeHtml(link(file))}">${escapeHtml(file.split("/").at(-1))}</a></li>`).join("")}</ul></section>`).join("");
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AFEON Books Files</title><style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#f8f5ef;color:#171717}section{background:#fff;border:1px solid #ddd;margin:16px 0;padding:16px}h1{margin-bottom:28px}h2{font-size:16px;margin-top:0}ul{list-style:none;padding:0;margin-bottom:0}li{padding:6px 0}a{color:#17624a;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><h1>AFEON Books deployed files</h1>${selectedFile ? `<p>Viewing <strong>${escapeHtml(selectedFile)}</strong></p>` : ""}${tree}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg"><title>AFEON Books Files</title><style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#f8f5ef;color:#171717}section{background:#fff;border:1px solid #ddd;margin:16px 0;padding:16px}h1{margin-bottom:28px}h2{font-size:16px;margin-top:0}ul{list-style:none;padding:0;margin-bottom:0}li{padding:6px 0}a{color:#17624a;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><h1>AFEON Books deployed files</h1>${selectedFile ? `<p>Viewing <strong>${escapeHtml(selectedFile)}</strong></p>` : ""}${tree}</body></html>`;
 }
 
 async function directoryResponseFor(request, env) {
@@ -645,6 +648,10 @@ if (url.hostname === "source.afeonbooks.com") {
 if (url.hostname === "authn.afeonbooks.com") {
   if (path.startsWith("/api/")) {
     return fetchApiRequest(request);
+  }
+
+  if (request.method === "GET" && path === "/favicon.svg") {
+    return env.ASSETS.fetch(new Request(new URL("/favicon.svg", request.url), request));
   }
 
   if (path === "/" || path === "/account" || path === "/account/" || /^\/(?:sign-in|account-check)\/[a-f0-9]{32}$/.test(path)) {
@@ -706,7 +713,7 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     request.method === "GET" &&
     (path.startsWith("/assets/") || path === "/favicon.svg")
   ) {
-    const assetPath = path === "/favicon.svg" ? "/admin/favicon.svg" : `/admin${path}`;
+    const assetPath = path === "/favicon.svg" ? "/favicon.svg" : `/admin${path}`;
     return env.ASSETS.fetch(new Request(new URL(assetPath, request.url), request));
   }
   return directoryResponse(404);

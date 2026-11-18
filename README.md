@@ -19,15 +19,15 @@ AFEON Books is a TypeScript monorepo for the AFEON Books storefront, admin dashb
 
 ## Repository Layout
 
-| Path | Purpose |
-| --- | --- |
-| `artifacts/site` | Public storefront and customer account pages |
-| `artifacts/admin` | Admin editor, order management, POS, and dev tools |
-| `artifacts/api-server` | Express API server |
-| `lib/db` | Drizzle database package and schema |
-| `lib/api-spec` | OpenAPI specification and code generation |
-| `lib/api-client-react` | Generated React API client |
-| `worker.js` | Production Cloudflare routing and API forwarding |
+| Path                   | Purpose                                            |
+| ---------------------- | -------------------------------------------------- |
+| `artifacts/site`       | Public storefront and customer account pages       |
+| `artifacts/admin`      | Admin editor, order management, POS, and dev tools |
+| `artifacts/api-server` | Express API server                                 |
+| `lib/db`               | Drizzle database package and schema                |
+| `lib/api-spec`         | OpenAPI specification and code generation          |
+| `lib/api-client-react` | Generated React API client                         |
+| `worker.js`            | Production Cloudflare routing and API forwarding   |
 
 ## Requirements
 
@@ -130,9 +130,9 @@ Find existing apps under your GitHub account's **Settings → Developer settings
 
 Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` on the API service as secrets. Optionally set `GITHUB_OAUTH_CALLBACK_URL` if using a different exact callback URL and `GITHUB_OAUTH_ORGANIZATION` if the allowed organization differs from `AFEON-Books`. OAuth requests `read:user`, `user:email`, and `read:org`. Sign-in requires active membership in the configured organization and a verified GitHub email that exactly matches an existing AFEON Books staff or admin account. When several verified GitHub emails match accounts, only staff/admin accounts are considered; sign-in is denied if more than one eligible account matches. The API never creates or promotes an account during GitHub sign-in; it preserves the matching database user's name, email, and role. A successful GitHub sign-in authorizes admin tools on `usw-2.afeonbooks.com` for the lifetime of the account session, so navigating between the hub, main admin, and site editor does not trigger another sign-in. The GitHub sign-in UI requires Turnstile (`staff_github_login` action); after success it opens the GitHub authorization flow in a new tab. Removing someone from the organization prevents further sign-ins. The admin hub and mailbox pages render Turnstile on `usw-2.afeonbooks.com` and `mailsystem.afeonbooks.com`, respectively; the customer sign-in flow also uses `afeonbooks.com`. Add those exact hostnames to the widget's allowed hostnames and `TURNSTILE_HOSTNAMES` (bare hostnames, no scheme or wildcard).
 
-Apply migrations 0003 through 0007 in sequence if they have not already been applied. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
+Apply migrations 0003 through 0008 in sequence if they have not already been applied. Keep the GitHub OAuth client secret only in the API service's secret environment, never in the frontend or source control. Require GitHub two-factor authentication for organization members.
 
-The staff-only admin hub is available at `https://usw-2.afeonbooks.com/`. The main admin and site editor are at `/main-admin` and `/site-editor`; other admin tools are at `/pos` and `/zoho-mail`. The Worker routes the admin app and `/api/*` requests through this hostname, while the API service remains hosted at `api-usw-2.afeonbooks.com`. Legacy `afeonbooks.com/admin` links redirect to the new main admin URL. Add the hostname to Cloudflare DNS and deploy the Worker custom-domain route from `wrangler.jsonc`.
+The staff-only admin hub is available at `https://usw-2.afeonbooks.com/`. The main admin and separate visual site editor are at `/main-admin` and `/site-editor`; the editor provides a live homepage preview, draggable section ordering, editable properties, and custom HTML/CSS/JavaScript blocks that publish in sandboxed iframes. Other admin tools are at `/pos` and `/zoho-mail`. The Worker routes the admin app and `/api/*` requests through this hostname, while the API service remains hosted at `api-usw-2.afeonbooks.com`. Legacy `afeonbooks.com/admin` links redirect to the new main admin URL. Add the hostname to Cloudflare DNS and deploy the Worker custom-domain route from `wrangler.jsonc`.
 
 Set `MAINTENANCE_KEY` as a secret environment variable on the API service. Direct maintenance toggles use `https://api-usw-2.afeonbooks.com/api/maintenance/off?key=<MAINTENANCE_KEY>` or `/api/maintenance/on?key=<MAINTENANCE_KEY>`. Choose a long random value and do not commit it or share the full URL; the key is required and there is no default.
 

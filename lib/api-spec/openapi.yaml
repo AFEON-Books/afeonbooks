@@ -327,6 +327,21 @@ components:
         illustratorLine: { type: string }
         footerNote: { type: string }
         accentColor: { type: string }
+        homeSectionOrder:
+          type: array
+          items:
+            type: string
+        homeCustomSections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, minLength: 1, maxLength: 80 }
+              name: { type: string, minLength: 1, maxLength: 80 }
+              html: { type: string, maxLength: 20000 }
+              css: { type: string, maxLength: 20000 }
+              js: { type: string, maxLength: 20000 }
+            required: [id, name, html, css, js]
         defaultShippingLabel: { type: string }
         defaultShippingAddress: { type: string }
         defaultShippingCity: { type: string }
@@ -344,7 +359,8 @@ components:
               postalCode: { type: string, minLength: 1 }
               country: { type: string, minLength: 1 }
               shippingFeeCents: { type: integer, minimum: 0 }
-            required: [id, label, address, city, postalCode, country, shippingFeeCents]
+            required:
+              [id, label, address, city, postalCode, country, shippingFeeCents]
         loyaltyPagesPerDollar: { type: integer, minimum: 0, maximum: 1000000 }
         ordersEnabled: { type: boolean }
         emailEnabled: { type: boolean }
@@ -363,7 +379,52 @@ components:
         blogHeroImageUrl: { type: string }
         blogBody: { type: string }
         updatedAt: { type: string }
-      required: [id, school, checkoutFields, brandName, navHomeLabel, heroTitle, heroSubtitle, ctaLabel, ctaUrl, coverImageUrl, aboutHeading, aboutBody, faqs, authorsLine, illustratorLine, footerNote, accentColor, defaultShippingLabel, defaultShippingAddress, defaultShippingCity, defaultShippingPostalCode, defaultShippingCountry, shippingAddresses, loyaltyPagesPerDollar, ordersEnabled, emailEnabled, emailFromName, emailFromAddress, emailReplyTo, emailSubject, emailHeading, emailIntro, emailButtonLabel, emailFooter, emailAccentColor, blogTitle, blogSubtitle, blogDate, blogHeroImageUrl, blogBody, updatedAt]
+      required:
+        [
+          id,
+          school,
+          checkoutFields,
+          brandName,
+          navHomeLabel,
+          heroTitle,
+          heroSubtitle,
+          ctaLabel,
+          ctaUrl,
+          coverImageUrl,
+          aboutHeading,
+          aboutBody,
+          faqs,
+          authorsLine,
+          illustratorLine,
+          footerNote,
+          accentColor,
+          homeSectionOrder,
+          homeCustomSections,
+          defaultShippingLabel,
+          defaultShippingAddress,
+          defaultShippingCity,
+          defaultShippingPostalCode,
+          defaultShippingCountry,
+          shippingAddresses,
+          loyaltyPagesPerDollar,
+          ordersEnabled,
+          emailEnabled,
+          emailFromName,
+          emailFromAddress,
+          emailReplyTo,
+          emailSubject,
+          emailHeading,
+          emailIntro,
+          emailButtonLabel,
+          emailFooter,
+          emailAccentColor,
+          blogTitle,
+          blogSubtitle,
+          blogDate,
+          blogHeroImageUrl,
+          blogBody,
+          updatedAt,
+        ]
     UpdateSiteContent:
       type: object
       properties:
@@ -397,6 +458,21 @@ components:
         illustratorLine: { type: string }
         footerNote: { type: string }
         accentColor: { type: string }
+        homeSectionOrder:
+          type: array
+          items:
+            type: string
+        homeCustomSections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, minLength: 1, maxLength: 80 }
+              name: { type: string, minLength: 1, maxLength: 80 }
+              html: { type: string, maxLength: 20000 }
+              css: { type: string, maxLength: 20000 }
+              js: { type: string, maxLength: 20000 }
+            required: [id, name, html, css, js]
         defaultShippingLabel: { type: string }
         defaultShippingAddress: { type: string }
         defaultShippingCity: { type: string }
@@ -432,7 +508,46 @@ components:
         blogDate: { type: string }
         blogHeroImageUrl: { type: string }
         blogBody: { type: string }
-      required: [brandName, navHomeLabel, heroTitle, heroSubtitle, ctaLabel, ctaUrl, coverImageUrl, aboutHeading, aboutBody, authorsLine, illustratorLine, footerNote, accentColor, defaultShippingLabel, defaultShippingAddress, defaultShippingCity, defaultShippingPostalCode, defaultShippingCountry, loyaltyPagesPerDollar, ordersEnabled, emailEnabled, emailFromName, emailFromAddress, emailReplyTo, emailSubject, emailHeading, emailIntro, emailButtonLabel, emailFooter, emailAccentColor, blogTitle, blogSubtitle, blogDate, blogHeroImageUrl, blogBody]
+      required:
+        [
+          brandName,
+          navHomeLabel,
+          heroTitle,
+          heroSubtitle,
+          ctaLabel,
+          ctaUrl,
+          coverImageUrl,
+          aboutHeading,
+          aboutBody,
+          authorsLine,
+          illustratorLine,
+          footerNote,
+          accentColor,
+          homeSectionOrder,
+          homeCustomSections,
+          defaultShippingLabel,
+          defaultShippingAddress,
+          defaultShippingCity,
+          defaultShippingPostalCode,
+          defaultShippingCountry,
+          loyaltyPagesPerDollar,
+          ordersEnabled,
+          emailEnabled,
+          emailFromName,
+          emailFromAddress,
+          emailReplyTo,
+          emailSubject,
+          emailHeading,
+          emailIntro,
+          emailButtonLabel,
+          emailFooter,
+          emailAccentColor,
+          blogTitle,
+          blogSubtitle,
+          blogDate,
+          blogHeroImageUrl,
+          blogBody,
+        ]
     Product:
       type: object
       properties:
@@ -448,7 +563,21 @@ components:
         showInShop: { type: boolean }
         sortOrder: { type: integer }
         createdAt: { type: string }
-      required: [id, school, name, description, priceCents, currency, imageUrl, stock, active, showInShop, sortOrder, createdAt]
+      required:
+        [
+          id,
+          school,
+          name,
+          description,
+          priceCents,
+          currency,
+          imageUrl,
+          stock,
+          active,
+          showInShop,
+          sortOrder,
+          createdAt,
+        ]
     CreateProduct:
       type: object
       properties:
@@ -461,7 +590,8 @@ components:
         active: { type: boolean }
         showInShop: { type: boolean }
         sortOrder: { type: integer }
-      required: [name, description, priceCents, currency, imageUrl, stock, active]
+      required:
+        [name, description, priceCents, currency, imageUrl, stock, active]
     ReorderProductIds:
       type: object
       properties:
@@ -516,13 +646,40 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/OrderItem" }
-      required: [id, school, customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, useDefaultAddress, paymentMethod, orderType, paymentStatus, status, subtotalCents, discountCents, shippingCents, totalCents, currency, createdAt, items]
+      required:
+        [
+          id,
+          school,
+          customerName,
+          customerEmail,
+          customerPhone,
+          shippingAddress,
+          city,
+          postalCode,
+          country,
+          useDefaultAddress,
+          paymentMethod,
+          orderType,
+          paymentStatus,
+          status,
+          subtotalCents,
+          discountCents,
+          shippingCents,
+          totalCents,
+          currency,
+          createdAt,
+          items,
+        ]
     CreateOrderResponse:
       allOf:
         - $ref: "#/components/schemas/Order"
         - type: object
           properties:
-            accessToken: { type: string, description: One-year bearer token for guest order access }
+            accessToken:
+              {
+                type: string,
+                description: One-year bearer token for guest order access,
+              }
           required: [accessToken]
     CreateOrderItem:
       type: object
@@ -559,7 +716,8 @@ components:
           type: array
           minItems: 1
           items: { $ref: "#/components/schemas/CreateOrderItem" }
-      required: [customerName, customerEmail, customerPhone, useDefaultAddress, items]
+      required:
+        [customerName, customerEmail, customerPhone, useDefaultAddress, items]
     UpdateOrderStatus:
       type: object
       properties:
@@ -584,7 +742,20 @@ components:
         notes: { type: string }
         shippingCents: { type: integer, minimum: 0 }
         discountCents: { type: integer, minimum: 0 }
-      required: [customerName, customerEmail, customerPhone, shippingAddress, city, postalCode, country, classroom, notes, shippingCents, discountCents]
+      required:
+        [
+          customerName,
+          customerEmail,
+          customerPhone,
+          shippingAddress,
+          city,
+          postalCode,
+          country,
+          classroom,
+          notes,
+          shippingCents,
+          discountCents,
+        ]
     SendTestEmail:
       type: object
       properties:

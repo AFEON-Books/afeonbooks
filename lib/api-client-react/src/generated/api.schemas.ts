@@ -28,6 +28,25 @@ export type SiteContentFaqsItem = {
   answer: string;
 };
 
+export type SiteContentHomeCustomSectionsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /** @maxLength 20000 */
+  html: string;
+  /** @maxLength 20000 */
+  css: string;
+  /** @maxLength 20000 */
+  js: string;
+};
+
 export type SiteContentShippingAddressesItem = {
   /** @minLength 1 */
   id: string;
@@ -63,6 +82,8 @@ export interface SiteContent {
   illustratorLine: string;
   footerNote: string;
   accentColor: string;
+  homeSectionOrder: string[];
+  homeCustomSections: SiteContentHomeCustomSectionsItem[];
   defaultShippingLabel: string;
   defaultShippingAddress: string;
   defaultShippingCity: string;
@@ -104,6 +125,25 @@ export type UpdateSiteContentFaqsItem = {
   answer: string;
 };
 
+export type UpdateSiteContentHomeCustomSectionsItem = {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  /** @maxLength 20000 */
+  html: string;
+  /** @maxLength 20000 */
+  css: string;
+  /** @maxLength 20000 */
+  js: string;
+};
+
 export type UpdateSiteContentShippingAddressesItem = {
   /** @minLength 1 */
   id: string;
@@ -137,6 +177,8 @@ export interface UpdateSiteContent {
   illustratorLine: string;
   footerNote: string;
   accentColor: string;
+  homeSectionOrder: string[];
+  homeCustomSections: UpdateSiteContentHomeCustomSectionsItem[];
   defaultShippingLabel: string;
   defaultShippingAddress: string;
   defaultShippingCity: string;

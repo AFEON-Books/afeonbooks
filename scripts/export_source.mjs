@@ -128,6 +128,7 @@ async function buildIndexHtml(rootTarget) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg">
   <title>AFEON Books Source</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; padding: 32px; background: #f7f7f7; color: #111; }
