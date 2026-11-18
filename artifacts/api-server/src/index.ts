@@ -44,6 +44,8 @@ async function ensureContentColumns() {
       ADD COLUMN IF NOT EXISTS checkout_fields text NOT NULL DEFAULT '[]',
       ADD COLUMN IF NOT EXISTS shipping_addresses text NOT NULL DEFAULT '',
       ADD COLUMN IF NOT EXISTS loyalty_pages_per_dollar text NOT NULL DEFAULT '50',
+      ADD COLUMN IF NOT EXISTS home_section_order text NOT NULL DEFAULT '["hero","shop","about","faq"]',
+      ADD COLUMN IF NOT EXISTS home_custom_sections text NOT NULL DEFAULT '[]',
       ADD COLUMN IF NOT EXISTS blog_title text NOT NULL DEFAULT 'Progress Update',
       ADD COLUMN IF NOT EXISTS blog_subtitle text NOT NULL DEFAULT 'A look inside the latest adventure from the AFEON Books team.',
       ADD COLUMN IF NOT EXISTS blog_date text NOT NULL DEFAULT 'September 15, 2026',

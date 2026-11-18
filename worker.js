@@ -1,6 +1,5 @@
 const API_ORIGINS = [
   "https://api-usw-2.afeonbooks.com",
-  "https://use-2.afeonbooks.com",
 ];
 
 async function fetchApiRequest(request, timeoutMs = 0) {
