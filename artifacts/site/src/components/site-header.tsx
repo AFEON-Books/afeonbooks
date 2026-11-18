@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useState } from "react";
+import { Link } from "wouter";
 import { Menu, ShoppingBag, X } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { createAuthEntryUrl, useAuth } from "@/lib/auth";
@@ -9,45 +9,22 @@ interface SiteHeaderProps {
   simple?: boolean;
 }
 
-const SECRET_TAPS = 5;
-const TAP_WINDOW_MS = 800;
-
 export function SiteHeader({ simple = false }: SiteHeaderProps) {
   const { itemCount, openCart } = useCart();
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const tapCountRef = useRef(0);
-  const lastTapAtRef = useRef(0);
-
-  const handleLogoClick = () => {
-    const now = Date.now();
-    if (now - lastTapAtRef.current > TAP_WINDOW_MS) {
-      tapCountRef.current = 0;
-    }
-    lastTapAtRef.current = now;
-    tapCountRef.current += 1;
-
-    if (tapCountRef.current >= SECRET_TAPS) {
-      tapCountRef.current = 0;
-      window.location.assign("/admin/");
-      return;
-    }
-    setLocation("/");
-  };
 
   return (
     <header className="px-4 py-4 sm:px-6 sm:py-6 md:py-8">
       <div className="max-w-[1400px] mx-auto">
         <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={handleLogoClick}
+        <Link
+          href="/"
           aria-label="Home"
           className="h-10 w-32 sm:w-40 flex items-center justify-center cursor-pointer hover:opacity-100 transition-opacity focus:outline-none"
         >
           <img src={xlogo} alt="" className="w-full h-full object-contain" draggable={false} />
-        </button>
+        </Link>
         <nav className="hidden md:flex items-center gap-8 text-black">
           {!simple ? (
             <>

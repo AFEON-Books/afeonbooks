@@ -28,6 +28,10 @@
     {
       "pattern": "source.afeonbooks.com",
       "custom_domain": true
+    },
+    {
+      "pattern": "usw-2.afeonbooks.com",
+      "custom_domain": true
     }
   ]
 }

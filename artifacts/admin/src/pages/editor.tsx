@@ -235,7 +235,11 @@ export default function Editor() {
     finally { setDevTestLoading(false); }
   };
 
-  const [activeTab, setActiveTab] = useState<"content" | "products" | "orders" | "email" | "marketing" | "users">("content");
+  const [activeTab, setActiveTab] = useState<"content" | "products" | "orders" | "email" | "marketing" | "users">(() => {
+    if (window.location.hash === "#site-editor") return "content";
+    if (window.location.hash === "#orders") return "orders";
+    return "content";
+  });
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [isReorderingProducts, setIsReorderingProducts] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState<string>("");
@@ -254,6 +258,15 @@ export default function Editor() {
   const updateOrderStatus = useUpdateOrderStatus();
   const deleteOrder = useDeleteOrder();
   const sendTestEmail = useSendTestEmail();
+
+  useEffect(() => {
+    const syncTabWithHash = () => {
+      if (window.location.hash === "#site-editor") setActiveTab("content");
+      if (window.location.hash === "#orders") setActiveTab("orders");
+    };
+    window.addEventListener("hashchange", syncTabWithHash);
+    return () => window.removeEventListener("hashchange", syncTabWithHash);
+  }, []);
 
   const handleStatusChange = (orderId: number, status: UpdateOrderStatusStatus) => {
     const estimatedDeliveryDate = status === "shipped"
