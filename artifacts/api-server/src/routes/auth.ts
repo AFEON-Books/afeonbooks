@@ -60,6 +60,7 @@ function allowedAdminReturnUrl(value: string | undefined): string | undefined {
   try {
     const target = new URL(value);
     const allowed = (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
+      || (target.origin === "https://usw-2.afeonbooks.com" && (target.pathname === "/" || target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
       || target.origin === "https://mailsystem.afeonbooks.com"
       || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname));
     return allowed && !target.username && !target.password ? target.toString() : undefined;
