@@ -14,6 +14,7 @@ const productionOrigins = new Set([
   "https://authn.afeonbooks.com",
   "https://mailsystem.afeonbooks.com",
   "https://source.afeonbooks.com",
+  "https://usw-2.afeonbooks.com",
 ]);
 const mutatingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

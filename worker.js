@@ -290,7 +290,7 @@ function githubOrganizationRedirect(request) {
 
 function sourceAuthError(status, message) {
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fsource.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fusw-2.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
     {
       status,
       headers: {
@@ -474,8 +474,10 @@ function sourceDashboardHtml() {
 
 function adminHubHtml() {
   const panels = [
-    { name: "Main Admin", description: "Manage orders, products, users, and store settings.", url: "/admin/#orders", logo: "ADM", local: true },
-    { name: "Site Editor", description: "Edit the website content and storefront settings.", url: "/admin/source-edit#site-editor", logo: "EDIT", local: true },
+    { name: "Main Admin", description: "Manage orders, products, users, and store settings.", url: "/main-admin#orders", logo: "ADM", local: true },
+    { name: "Site Editor", description: "Edit the website content and storefront settings.", url: "/site-editor#site-editor", logo: "EDIT", local: true },
+    { name: "POS Checkout", description: "Process in-person orders and payments.", url: "/pos", logo: "POS", local: true },
+    { name: "Zoho Mail", description: "Open the staff mailbox and email tools.", url: "/zoho-mail", logo: "MAIL", local: true },
     { name: "GitHub", description: "Repository and source control.", url: "https://github.com/acdu1/afeonbooks", logo: "GH" },
     { name: "GitHub Codespaces", description: "Open the online development workspace.", url: "https://ubiquitous-guacamole-x545p5p7996439pxj.github.dev/", logo: "CS" },
     { name: "Cloudflare", description: "Worker, DNS, and domain settings.", url: "https://dash.cloudflare.com/a130548b1748b2365a5c0e027fe3ebd8/home", logo: "CF" },
@@ -637,37 +639,7 @@ async function handleRequest(request, env) {
     if (url.hostname === "afeonbooks.com" && (path === "/directory" || path === "/directory/" || path.startsWith("/directory/file/") || path === "/directory-manifest.json")) return directoryResponseFor(request, env);
 
 if (url.hostname === "source.afeonbooks.com") {
-  if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
-
-  const isSourceDashboardRoute = path === "/" || path === "/source" || path === "/source/" || path === "/infra" || path === "/infra/";
-  if (!isSourceDashboardRoute) {
-    return env.ASSETS.fetch(request);
-  }
-
-  let user;
-  try {
-    user = await getAdminUserFromSession(request);
-  } catch (error) {
-    console.error(JSON.stringify({
-      message: "Source dashboard admin session check failed",
-      error: error instanceof Error ? error.message : String(error),
-    }));
-    return sourceAuthError(503, "The session check failed. Please try again shortly.");
-  }
-
-  if (!user?.user) return githubOrganizationRedirect(request);
-
-  if (user.user.role !== "staff" && user.user.role !== "admin") {
-    return sourceAuthError(403, "A staff or admin account is required to access this dashboard.");
-  }
-  if (!user.organizationVerified) return githubOrganizationRedirect(request);
-
-  return new Response(sourceDashboardHtml(), {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
+  return Response.redirect("https://usw-2.afeonbooks.com/", 302);
 }
 
 if (url.hostname === "authn.afeonbooks.com") {
@@ -713,17 +685,29 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     });
   }
 
-  const isAdminAppRoute = path === "/admin" || path === "/admin/" ||
-    path === "/admin/pos" || path === "/admin/pos/" ||
-    (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."));
-  if (request.method === "GET" && isAdminAppRoute) {
-    const assetPath = path === "/admin/pos" || path === "/admin/pos/"
-      ? "/admin/pos"
-      : "/admin/";
-    return env.ASSETS.fetch(new Request(new URL(assetPath, request.url), request));
+  const adminAppRoutes = new Map([
+    ["/main-admin", "/admin/"],
+    ["/main-admin/", "/admin/"],
+    ["/site-editor", "/admin/"],
+    ["/site-editor/", "/admin/"],
+    ["/pos", "/admin/pos"],
+    ["/pos/", "/admin/pos"],
+    ["/zoho-mail", "/admin/"],
+    ["/zoho-mail/", "/admin/"],
+    ["/maintenance", "/admin/"],
+    ["/maintenance/", "/admin/"],
+    ["/status-edit", "/admin/"],
+    ["/status-edit/", "/admin/"],
+  ]);
+  if (request.method === "GET" && adminAppRoutes.has(path)) {
+    return env.ASSETS.fetch(new Request(new URL(adminAppRoutes.get(path), request.url), request));
   }
-  if (request.method === "GET" && path.startsWith("/admin/")) {
-    return env.ASSETS.fetch(request);
+  if (
+    request.method === "GET" &&
+    (path.startsWith("/assets/") || path === "/favicon.svg")
+  ) {
+    const assetPath = path === "/favicon.svg" ? "/admin/favicon.svg" : `/admin${path}`;
+    return env.ASSETS.fetch(new Request(new URL(assetPath, request.url), request));
   }
   return directoryResponse(404);
 }
@@ -732,12 +716,14 @@ if (url.hostname === "usw-2.afeonbooks.com") {
       return fetchApiRequest(request);
     }
 
-    const isAdminRoute = path === "/admin" || path.startsWith("/admin/");
+    if (url.hostname === "afeonbooks.com" && (path === "/admin" || path.startsWith("/admin/"))) {
+      return Response.redirect(new URL("https://usw-2.afeonbooks.com/main-admin"), 301);
+    }
+
     const isMailSystem = url.hostname === "mailsystem.afeonbooks.com";
 
     if (
       !isMailSystem &&
-      !isAdminRoute &&
       request.method === "GET" &&
       request.headers.get("Accept")?.includes("text/html") &&
       await isMaintenanceMode()
@@ -757,14 +743,6 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     if (orderPdfMatch) return orderPdfResponse(request, orderPdfMatch[1]);
 
     const fetchSiteIndex = () => env.ASSETS.fetch(new Request(new URL("/", request.url), request));
-    const fetchAdminIndex = () => env.ASSETS.fetch(new Request(new URL("/admin/", request.url), request));
-    const fetchAdminPos = () => env.ASSETS.fetch(new Request(new URL("/admin/pos", request.url), request));
-
-    if (path === "/admin/admin" || path === "/admin/admin/") return Response.redirect(new URL("/admin/", request.url), 301);
-    if (path.startsWith("/admin/admin/")) return Response.redirect(new URL(path.replace(/^\/admin\/admin/, "/admin"), request.url), 301);
-    if (path === "/admin/pos" || path === "/admin/pos/") return fetchAdminPos();
-    if (path === "/admin/zoho-mail" || path === "/admin/zoho-mail/") return fetchAdminIndex();
-    if (path === "/admin" || path === "/admin/" || (path.startsWith("/admin/") && !path.split("/").pop()?.includes("."))) return fetchAdminIndex();
 
     const fetchPickupIndex = () => env.ASSETS.fetch(new Request(new URL("/pickup/", request.url), request));
     if (path === "/pickup" || path === "/pickup/" || (path.startsWith("/pickup/") && !path.split("/").pop()?.includes("."))) return fetchPickupIndex();

@@ -4,10 +4,10 @@ import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizz
 import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
-  consumeFreshGithubAuthentication,
   createAuthToken,
   createSession,
   destroySession,
+  hasGithubOrganizationAuthentication,
   hashPassword,
   loadUser,
   markSessionGithubOrganizationVerified,
@@ -55,12 +55,11 @@ function githubStateCookieOptions() {
 }
 
 function allowedAdminReturnUrl(value: string | undefined): string | undefined {
-  if (!value) return "https://afeonbooks.com/admin/";
+  if (!value) return "https://usw-2.afeonbooks.com/main-admin";
   if (value.length > 1900) return undefined;
   try {
     const target = new URL(value);
-    const allowed = (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
-      || (target.origin === "https://usw-2.afeonbooks.com" && (target.pathname === "/" || target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
+    const allowed = (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/"].includes(target.pathname))
       || target.origin === "https://mailsystem.afeonbooks.com"
       || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname));
     return allowed && !target.username && !target.password ? target.toString() : undefined;
@@ -535,7 +534,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 });
 
 router.get("/auth/admin/access", requireUser, requireStaffAccess("staff", "admin"), async (req, res): Promise<void> => {
-  if (!await consumeFreshGithubAuthentication(req)) {
+  if (!await hasGithubOrganizationAuthentication(req)) {
     res.status(403).set("Cache-Control", "no-store").json({ error: "Sign in with GitHub again to open this protected page." });
     return;
   }

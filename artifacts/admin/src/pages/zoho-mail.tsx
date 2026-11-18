@@ -46,8 +46,8 @@ export default function ZohoMail() {
             <h1 className="text-2xl font-bold tracking-tight">Zoho Mail</h1>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/admin/" className="px-4 py-2 border border-black/20 text-xs font-bold uppercase tracking-widest hover:bg-black/5">Back to Admin</a>
-            <a href="/admin/#email" className="px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-black/80">Email Templates</a>
+            <a href="/main-admin" className="px-4 py-2 border border-black/20 text-xs font-bold uppercase tracking-widest hover:bg-black/5">Back to Admin</a>
+            <a href="/main-admin#email" className="px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-black/80">Email Templates</a>
           </div>
         </div>
       </header>

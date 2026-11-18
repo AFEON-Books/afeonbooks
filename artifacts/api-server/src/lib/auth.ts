@@ -13,6 +13,7 @@ const PRODUCTION_ORIGINS = new Set([
   "https://afeonbooks.com",
   "https://authn.afeonbooks.com",
   "https://source.afeonbooks.com",
+  "https://usw-2.afeonbooks.com",
 ]);
 
 declare global {
@@ -162,20 +163,18 @@ export async function markSessionGithubOrganizationVerified(request: Request, us
   return session?.userId === userId;
 }
 
-export async function consumeFreshGithubAuthentication(request: Request): Promise<boolean> {
+export async function hasGithubOrganizationAuthentication(request: Request): Promise<boolean> {
   const token = request.cookies?.[SESSION_COOKIE];
   if (!token || !request.user) return false;
-  const now = new Date();
-  const [session] = await db.update(sessionsTable)
-    .set({ githubAuthenticatedAt: null })
+  const [session] = await db.select({ githubUserId: sessionsTable.githubUserId })
+    .from(sessionsTable)
     .where(and(
       eq(sessionsTable.tokenHash, hashSessionToken(token)),
       eq(sessionsTable.userId, request.user.id),
-      gt(sessionsTable.expiresAt, now),
-      gt(sessionsTable.githubAuthenticatedAt, new Date(now.getTime() - 5 * 60 * 1000)),
+      gt(sessionsTable.expiresAt, new Date()),
     ))
-    .returning({ userId: sessionsTable.userId });
-  return session?.userId === request.user.id;
+    .limit(1);
+  return Boolean(session?.githubUserId);
 }
 
 export async function requireUser(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -208,7 +207,7 @@ async function authorizeStaffIdentity(request: Request, response: Response, role
     ))
     .limit(1);
   if (!session?.githubUserId) {
-    response.status(403).json({ error: "An active GitHub organization sign-in is required" });
+    response.status(403).json({ error: "Your GitHub admin sign-in has expired. Sign in again to continue." });
     return false;
   }
   return true;
@@ -240,7 +239,7 @@ export function requireGithubOrganizationMember() {
       ))
       .limit(1);
     if (!session?.githubUserId) {
-      response.status(403).json({ error: "Sign in with a GitHub organization account to change maintenance mode" });
+        response.status(403).json({ error: "Your GitHub admin sign-in has expired. Sign in again to continue." });
       return;
     }
     next();

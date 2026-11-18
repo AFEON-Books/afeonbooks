@@ -491,13 +491,14 @@ function Router() {
     <Switch>
       <Route path="/maintenance" component={MaintenanceRoute} />
       <Route path="/maintenance/" component={MaintenanceRoute} />
-      <Route path="/pos/" component={Pos} />
       <Route path="/pos" component={Pos} />
+      <Route path="/pos/" component={Pos} />
       <Route path="/zoho-mail" component={ZohoMail} />
       <Route path="/zoho-mail/" component={ZohoMail} />
-      <Route path="/source-edit" component={AdminHome} />
-      <Route path="/source-edit/" component={AdminHome} />
-      <Route path="/" component={AdminHome} />
+      <Route path="/site-editor" component={AdminHome} />
+      <Route path="/site-editor/" component={AdminHome} />
+      <Route path="/main-admin" component={AdminHome} />
+      <Route path="/main-admin/" component={AdminHome} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -601,10 +602,9 @@ function useDevAudit() {
 
 function App() {
   useDevAudit();
-  const adminBase = "/admin";
-  const isPosPath = window.location.pathname === `${adminBase}/pos` || window.location.pathname === `${adminBase}/pos/`;
-  const isZohoMailPath = window.location.pathname === `${adminBase}/zoho-mail` || window.location.pathname === `${adminBase}/zoho-mail/`;
-  const isStatusEditPath = window.location.pathname === `${adminBase}/status-edit` || window.location.pathname === `${adminBase}/status-edit/`;
+  const isPosPath = window.location.pathname === "/pos" || window.location.pathname === "/pos/";
+  const isZohoMailPath = ["/zoho-mail", "/zoho-mail/"].includes(window.location.pathname);
+  const isStatusEditPath = ["/status-edit", "/status-edit/"].includes(window.location.pathname);
   const [adminView, setAdminView] = useState(() => window.location.hash);
 
   useEffect(() => {
@@ -625,7 +625,7 @@ function App() {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      window.location.assign(`${window.location.origin}${adminBase}/pos/`);
+      window.location.assign("/pos/");
     };
 
     document.addEventListener("click", onClick, true);
@@ -638,7 +638,7 @@ function App() {
         {isStatusEditPath ? (
           <StatusEditRedirect />
         ) : (
-          <WouterRouter base={adminBase}>
+          <WouterRouter>
             <AdminAccessGate>
               {isPosPath ? (
                 <Pos />

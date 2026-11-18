@@ -658,14 +658,14 @@ export default function Editor() {
       <header className="bg-white border-b border-black/10 sticky top-0 z-50 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <a href="/" aria-label="Home" className="w-9 h-9 flex items-center justify-center hover:opacity-80 transition-opacity">
+            <a href="/" aria-label="Admin hub" className="w-9 h-9 flex items-center justify-center hover:opacity-80 transition-opacity">
               <img src={xlogo} alt="" className="w-full h-full object-contain" draggable={false} />
             </a>
             <h1 className="font-bold text-xl tracking-tight">Admin Dashboard</h1>
           </div>
           <div className="flex gap-4 items-center">
             <a
-              href="/"
+              href="https://afeonbooks.com/"
               className="inline-flex items-center justify-center min-h-9 px-4 py-2 rounded-md text-sm font-medium border border-black/20 hover:bg-black/5 transition-colors"
             >
               View Site
@@ -1342,7 +1342,7 @@ export default function Editor() {
                   Export Excel
                 </Button>
                 <a
-                  href="/admin/pos"
+                  href="/pos"
                   className="inline-flex items-center gap-2 px-4 h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-widest transition-colors"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>

@@ -39,8 +39,7 @@ function getAllowedReturnUrl(value: string | null): string | null {
     const target = new URL(value);
     const allowed = target.origin === "https://mailsystem.afeonbooks.com"
       || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname))
-      || (target.origin === "https://usw-2.afeonbooks.com" && (target.pathname === "/" || target.pathname === "/admin" || target.pathname.startsWith("/admin/")))
-      || (target.origin === "https://afeonbooks.com" && (target.pathname === "/admin" || target.pathname.startsWith("/admin/")));
+      || (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/"].includes(target.pathname));
     if (!allowed || target.username || target.password) {
       return null;
     }
@@ -155,7 +154,7 @@ function AccountForm() {
 
       {step === "email" && (
         <a
-          href={`https://authn.afeonbooks.com/account?return_to=${encodeURIComponent("https://afeonbooks.com/admin/")}`}
+          href={`https://authn.afeonbooks.com/account?return_to=${encodeURIComponent("https://usw-2.afeonbooks.com/main-admin")}`}
           className="flex w-full items-center justify-center gap-3 rounded-md bg-[#24292f] px-5 py-4 text-sm font-semibold text-white hover:bg-[#32383f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#24292f]"
         >
           <Github aria-hidden="true" size={20} />
