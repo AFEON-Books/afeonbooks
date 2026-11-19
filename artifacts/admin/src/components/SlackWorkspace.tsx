@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  Activity,
+  BookOpen,
+  Cloud,
+  Code2,
+  Database,
+  Github,
   Hash,
+  Headset,
+  LayoutDashboard,
+  Mail,
   MessageCircle,
+  PenTool,
   Phone,
   Plus,
   Search,
   Send,
+  Server,
+  ShoppingCart,
   Users,
   Video,
   X,
@@ -654,8 +666,9 @@ export default function SlackWorkspace() {
   return (
     <main className="fixed inset-0 z-[100] flex bg-white font-sans text-[#1d1c1d]">
       <aside className="hidden w-[68px] shrink-0 flex-col items-center gap-4 bg-[#1a1d21] py-4 text-white sm:flex">
-        <a href="/" title="Admin Hub" className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#80d7f6] text-sm font-black text-[#111111]">A</a>
-        <a href="/" title="Admin Hub" className="rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"><Users size={20} /></a>
+        <a href="/" title="AFEON Workspace" className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#80d7f6] text-sm font-black text-[#111111]">A</a>
+        <a href="/main-admin#orders" title="Main Admin" className="rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"><LayoutDashboard size={20} /></a>
+        <a href="/support-chat" title="Customer Support" className="rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"><Headset size={20} /></a>
         <span className="mt-auto text-[10px] text-white/35">AFEON</span>
       </aside>
 
@@ -671,6 +684,19 @@ export default function SlackWorkspace() {
           </label>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+          <div className="mb-1 px-2 pt-2 text-[11px] font-bold uppercase tracking-wider text-white/55">Workspace tools</div>
+          <a href="/support-chat" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Headset size={15} className="shrink-0 text-white/45" />Customer Support</a>
+          <a href="/main-admin#orders" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><LayoutDashboard size={15} className="shrink-0 text-white/45" />Main Admin</a>
+          <a href="/site-editor#site-editor" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><PenTool size={15} className="shrink-0 text-white/45" />Site Editor</a>
+          <a href="/pos" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><ShoppingCart size={15} className="shrink-0 text-white/45" />POS Checkout</a>
+          <a href="/zoho-mail" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Mail size={15} className="shrink-0 text-white/45" />Zoho Mail</a>
+          <a href="https://github.com/acdu1/afeonbooks" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Github size={15} className="shrink-0 text-white/45" />GitHub</a>
+          <a href="https://ubiquitous-guacamole-x545p5p7996439pxj.github.dev/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Code2 size={15} className="shrink-0 text-white/45" />GitHub Codespaces</a>
+          <a href="https://dash.cloudflare.com/a130548b1748b2365a5c0e027fe3ebd8/home" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Cloud size={15} className="shrink-0 text-white/45" />Cloudflare</a>
+          <a href="https://supabase.com/dashboard/project/msxfhfdeqxqvjuypcspm" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Database size={15} className="shrink-0 text-white/45" />Supabase</a>
+          <a href="https://dashboard.render.com/web/srv-da57c6jbc2fs738388lg" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Server size={15} className="shrink-0 text-white/45" />Render</a>
+          <a href="https://status.afeonbooks.com/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Activity size={15} className="shrink-0 text-white/45" />StatusPage</a>
+          <a href="https://editor.reedsy.com/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><BookOpen size={15} className="shrink-0 text-white/45" />Reedsy Book Editor</a>
           <div className="mb-1 flex items-center justify-between px-2 pt-2 text-[11px] font-bold uppercase tracking-wider text-white/55">
             <span>Channels</span>
             <button type="button" onClick={() => { setShowCreateRoom("channel"); setRoomName(""); }} title="Create channel" className="rounded p-1 hover:bg-white/10"><Plus size={15} /></button>
@@ -700,7 +726,7 @@ export default function SlackWorkspace() {
           ))}
         </nav>
         <footer className="flex items-center justify-between border-t border-white/10 px-3 py-3 text-xs">
-          <a href="/" className="text-white/60 hover:text-white">Admin Hub</a>
+          <a href="/" className="text-white/60 hover:text-white">Workspace</a>
           <span className="text-white/40">{connected ? "Live" : "Connecting…"}</span>
         </footer>
       </aside>
@@ -720,7 +746,7 @@ export default function SlackWorkspace() {
               <div className="flex items-center gap-1">
                 <button type="button" title="Start audio call" onClick={() => void startCall("audio")} disabled={!connected || Boolean(call) || Boolean(incomingCall)} className="rounded-md p-2 hover:bg-black/5 disabled:opacity-40"><Phone size={18} /></button>
                 <button type="button" title="Start video call" onClick={() => void startCall("video")} disabled={!connected || Boolean(call) || Boolean(incomingCall)} className="rounded-md p-2 hover:bg-black/5 disabled:opacity-40"><Video size={18} /></button>
-                <a href="/" title="Admin Hub" className="ml-1 rounded-md px-2 py-1.5 text-xs text-black/55 hover:bg-black/5">Hub</a>
+                <a href="/" title="Workspace" className="ml-1 rounded-md px-2 py-1.5 text-xs text-black/55 hover:bg-black/5">Workspace</a>
               </div>
             </header>
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-8">

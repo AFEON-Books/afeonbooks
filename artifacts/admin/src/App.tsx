@@ -23,7 +23,6 @@ import Dev from "@/pages/dev";
 import ZohoMail from "@/pages/zoho-mail";
 import SiteEditor from "@/pages/site-editor";
 import { MaintenancePage } from "@/pages/maintenance";
-import AdminHub from "@/pages/admin-hub";
 import CustomerSupportPage from "@/pages/customer-support";
 import SlackWorkspace from "@/components/SlackWorkspace";
 
@@ -728,7 +727,9 @@ function Router() {
   };
   return (
     <Switch>
-      <Route path="/" component={AdminHub} />
+      <Route path="/" component={ChatPage} />
+      <Route path="/hub" component={ChatPage} />
+      <Route path="/hub/" component={ChatPage} />
       <Route path="/maintenance" component={MaintenanceRoute} />
       <Route path="/maintenance/" component={MaintenanceRoute} />
       <Route path="/chat" component={ChatPage} />

@@ -508,6 +508,8 @@ if (url.hostname === "usw-2.afeonbooks.com") {
 
   const adminAppRoutes = new Map([
     ["/", "/admin/"],
+    ["/hub", "/admin/"],
+    ["/hub/", "/admin/"],
     ["/main-admin", "/admin/"],
     ["/main-admin/", "/admin/"],
     ["/site-editor", "/admin/"],
