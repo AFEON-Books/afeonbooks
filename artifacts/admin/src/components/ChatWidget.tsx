@@ -255,6 +255,8 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
     }
   };
 
+  const onlineUserCount = users.filter((user) => user.online).length;
+
   if (!authorized) return null;
 
   return (
@@ -289,7 +291,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                 <p className="text-xs text-white/70">
                   {selectedUser
                     ? connected ? "Online now" : "Reconnecting…"
-                    : `${users.length} staff online${connected ? " · Live" : " · Reconnecting…"}`}
+                    : `${onlineUserCount} staff online${connected ? " · Live" : " · Reconnecting…"}`}
                 </p>
               </div>
             </div>
