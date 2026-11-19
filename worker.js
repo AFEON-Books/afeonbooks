@@ -704,6 +704,8 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     ["/maintenance/", "/admin/"],
     ["/status-edit", "/admin/"],
     ["/status-edit/", "/admin/"],
+    ["/chat", "/admin/"],
+    ["/chat/", "/admin/"],
   ]);
   if (request.method === "GET" && adminAppRoutes.has(path)) {
     return env.ASSETS.fetch(new Request(new URL(adminAppRoutes.get(path), request.url), request));

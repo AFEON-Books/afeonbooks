@@ -39,7 +39,7 @@ function getAllowedReturnUrl(value: string | null): string | null {
     const target = new URL(value);
     const allowed = target.origin === "https://mailsystem.afeonbooks.com"
       || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname))
-      || (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/"].includes(target.pathname));
+      || (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/", "/chat", "/chat/"].includes(target.pathname));
     if (!allowed || target.username || target.password) {
       return null;
     }

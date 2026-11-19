@@ -46,10 +46,10 @@ function sendEvent(socket: WebSocket | null, event: object): boolean {
   return true;
 }
 
-export function ChatWidget() {
+export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
   const [authorized, setAuthorized] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(fullPage);
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
@@ -218,11 +218,13 @@ export function ChatWidget() {
   if (!authorized) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-[100] font-sans">
+    <div className={fullPage ? "fixed inset-0 z-[100] bg-white font-sans" : "fixed bottom-5 right-5 z-[100] font-sans"}>
       {open && (
         <section
           aria-label="Team chat"
-          className="mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl"
+          className={fullPage
+            ? "flex h-dvh w-full flex-col overflow-hidden bg-white"
+            : "mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl"}
         >
           <header className="flex items-center justify-between bg-[#203b2c] px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-2">
@@ -251,9 +253,11 @@ export function ChatWidget() {
                 </p>
               </div>
             </div>
-            <button type="button" aria-label="Close chat" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10">
-              <X size={18} />
-            </button>
+            {!fullPage && (
+              <button type="button" aria-label="Close chat" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10">
+                <X size={18} />
+              </button>
+            )}
           </header>
 
           {!selectedUser ? (
@@ -332,21 +336,23 @@ export function ChatWidget() {
           {error && <p role="alert" className="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
         </section>
       )}
-      <button
-        type="button"
-        aria-label={open ? "Close team chat" : "Open team chat"}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#203b2c] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#31553f]"
-      >
-        {open ? <X size={20} /> : <MessageCircle size={20} />}
-        <span>{open ? "Close" : "Chat"}</span>
-        {unreadUsers.size > 0 && !open && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px]">
-            {unreadUsers.size}
-          </span>
-        )}
-      </button>
+      {!fullPage && (
+        <button
+          type="button"
+          aria-label={open ? "Close team chat" : "Open team chat"}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#203b2c] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#31553f]"
+        >
+          {open ? <X size={20} /> : <MessageCircle size={20} />}
+          <span>{open ? "Close" : "Chat"}</span>
+          {unreadUsers.size > 0 && !open && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px]">
+              {unreadUsers.size}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }

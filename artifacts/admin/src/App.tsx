@@ -708,6 +708,10 @@ function AdminHome() {
   return devOpen ? <Dev /> : <Editor />;
 }
 
+function ChatPage() {
+  return <ChatWidget fullPage />;
+}
+
 function Router() {
   const MaintenanceRoute = () => {
     const fromAdminButton =
@@ -724,6 +728,8 @@ function Router() {
     <Switch>
       <Route path="/maintenance" component={MaintenanceRoute} />
       <Route path="/maintenance/" component={MaintenanceRoute} />
+      <Route path="/chat" component={ChatPage} />
+      <Route path="/chat/" component={ChatPage} />
       <Route path="/pos" component={Pos} />
       <Route path="/pos/" component={Pos} />
       <Route path="/zoho-mail" component={ZohoMail} />
@@ -951,7 +957,6 @@ function App() {
             </AdminAccessGate>
           </WouterRouter>
         )}
-        <ChatWidget />
         <Toaster position="top-center" richColors />
       </TooltipProvider>
     </QueryClientProvider>
