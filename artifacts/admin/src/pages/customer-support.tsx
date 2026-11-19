@@ -150,13 +150,14 @@ export default function CustomerSupportPage() {
       if (!response.ok) throw new Error(await readError(response, "Unable to update this conversation."));
       const result = await response.json() as {
         conversation: { status: "open" | "closed" };
-        endedMessage?: SupportMessage;
       };
-      setStatus(result.conversation.status);
-      if (result.endedMessage) {
-        setMessages((current) => current.some((item) => item.id === result.endedMessage!.id)
-          ? current
-          : [...current, result.endedMessage!]);
+      if (result.conversation.status === "closed") {
+        setConversations((current) => current.filter((item) => item.id !== selectedId));
+        setSelectedId(null);
+        setMessages([]);
+        setStatus("closed");
+      } else {
+        setStatus("open");
       }
       void loadConversations();
     } catch (cause) {

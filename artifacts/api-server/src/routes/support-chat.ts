@@ -9,7 +9,6 @@ const router: IRouter = Router();
 const CUSTOMER_COOKIE = "afeonbooks_support_chat";
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
 const MAX_MESSAGE_LENGTH = 2_000;
-const SESSION_ENDED_MESSAGE = "Thank you for chatting with AFEON Books. Your session has ended. If you have further questions, please start a new support chat.";
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 let rateLimitCleanupAt = 0;
 
@@ -72,6 +71,13 @@ async function findCustomerConversation(request: Request, response: Response) {
     .where(eq(supportConversationsTable.customerTokenHash, hashSessionToken(token)))
     .limit(1);
   if (!conversation) {
+    response.clearCookie(CUSTOMER_COOKIE, {
+      httpOnly: true,
+      secure: IS_PRODUCTION,
+      sameSite: "lax",
+      domain: IS_PRODUCTION ? ".afeonbooks.com" : undefined,
+      path: "/api/support-chat",
+    });
     response.status(401).json({ error: "This support conversation has expired. Start a new one." });
     return undefined;
   }
@@ -318,36 +324,20 @@ router.patch("/support-chat/admin/conversations/:id", requireUser, requireStaffA
       .limit(1);
     if (!current) return [];
 
-    const now = new Date();
-    let endedMessage: {
-      id: number;
-      senderType: string;
-      senderUserId: number | null;
-      message: string;
-      createdAt: Date;
-    } | undefined;
-    if (status === "closed" && current.status !== "closed") {
-      const [inserted] = await tx.insert(supportMessagesTable)
-        .values({
-          conversationId: id,
-          senderType: "staff",
-          senderUserId: request.user!.id,
-          message: SESSION_ENDED_MESSAGE,
-        })
-        .returning({
-          id: supportMessagesTable.id,
-          senderType: supportMessagesTable.senderType,
-          senderUserId: supportMessagesTable.senderUserId,
-          message: supportMessagesTable.message,
-          createdAt: supportMessagesTable.createdAt,
-        });
-      endedMessage = inserted;
+    if (status === "closed") {
+      await tx.delete(supportMessagesTable)
+        .where(eq(supportMessagesTable.conversationId, id));
+      await tx.delete(supportConversationsTable)
+        .where(eq(supportConversationsTable.id, id));
+      return [{ conversation: { id, status: "closed" as const } }];
     }
+
+    const now = new Date();
     const [updated] = await tx.update(supportConversationsTable)
       .set({ status, updatedAt: now })
       .where(eq(supportConversationsTable.id, id))
       .returning({ id: supportConversationsTable.id, status: supportConversationsTable.status });
-    return [{ conversation: updated, endedMessage }];
+    return [{ conversation: updated }];
   });
   if (!conversation) {
     response.status(404).json({ error: "Support conversation not found." });

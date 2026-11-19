@@ -77,6 +77,15 @@ export function CustomerSupportChat() {
           cache: "no-store",
           signal: controller.signal,
         });
+        if (response.status === 401) {
+          if (!controller.signal.aborted) {
+            setMessages([]);
+            setStatus("closed");
+            setError("");
+          }
+          pollingRef.current = false;
+          return;
+        }
         if (!response.ok) throw new Error(await readError(response, "Unable to load your support messages."));
         const result = await response.json() as SupportMessagesResponse;
         if (!controller.signal.aborted) {
