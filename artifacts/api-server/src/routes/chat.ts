@@ -665,19 +665,8 @@ async function handleClientMessage(socket: WebSocket, connection: ChatConnection
     }
 
     const peerUserId = Number(recipientUserId);
-    const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
-    const [recipient] = await db.select({ id: usersTable.id })
-      .from(chatPresenceTable)
-      .innerJoin(usersTable, eq(usersTable.id, chatPresenceTable.userId))
-      .where(and(
-        eq(usersTable.id, peerUserId),
-        gt(chatPresenceTable.lastSeenAt, onlineSince),
-        or(eq(usersTable.role, "staff"), eq(usersTable.role, "admin")),
-      ))
-      .limit(1);
-    if (!recipient) {
-      sendError(socket, "That staff member is no longer online");
-      await sendUsers(socket, connection.userId);
+    if (!await staffUserExists(peerUserId)) {
+      sendError(socket, "That staff member could not be found");
       return;
     }
 
