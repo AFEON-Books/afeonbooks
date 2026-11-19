@@ -83,18 +83,24 @@ async function sendUsers(socket: WebSocket, userId: number): Promise<void> {
   const users = await db.select({
     id: usersTable.id,
     name: usersTable.name,
+    lastSeenAt: chatPresenceTable.lastSeenAt,
   })
-    .from(chatPresenceTable)
-    .innerJoin(usersTable, eq(usersTable.id, chatPresenceTable.userId))
-    .where(and(
-      gt(chatPresenceTable.lastSeenAt, onlineSince),
-      or(
-        eq(usersTable.role, "staff"),
-        eq(usersTable.role, "admin"),
-      ),
+    .from(usersTable)
+    .leftJoin(chatPresenceTable, eq(usersTable.id, chatPresenceTable.userId))
+    .where(or(
+      eq(usersTable.role, "staff"),
+      eq(usersTable.role, "admin"),
     ))
     .orderBy(usersTable.name);
-  sendJson(socket, { type: "users", users: users.filter((user) => user.id !== userId) });
+  sendJson(socket, {
+    type: "users",
+    users: users
+      .filter((user) => user.id !== userId)
+      .map(({ lastSeenAt, ...user }) => ({
+        ...user,
+        online: lastSeenAt !== null && lastSeenAt > onlineSince,
+      })),
+  });
 }
 
 async function staffUserExists(userId: number): Promise<boolean> {

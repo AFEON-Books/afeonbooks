@@ -4,9 +4,41 @@ import { ArrowLeft, MessageCircle, Send, X } from "lucide-react";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 const PRESENCE_INTERVAL_MS = 20_000;
 
+let chatAudioContext: AudioContext | null = null;
+
+function playMessageDing(): void {
+  if (typeof window === "undefined" || typeof window.AudioContext !== "function") return;
+
+  try {
+    chatAudioContext ??= new window.AudioContext();
+    if (chatAudioContext.state === "suspended") {
+      void chatAudioContext.resume().catch((error: unknown) => {
+        console.warn("Unable to resume chat notification audio", error);
+      });
+    }
+
+    const now = chatAudioContext.currentTime;
+    const oscillator = chatAudioContext.createOscillator();
+    const volume = chatAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, now);
+    oscillator.frequency.exponentialRampToValueAtTime(1174, now + 0.12);
+    volume.gain.setValueAtTime(0.0001, now);
+    volume.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+    volume.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+    oscillator.connect(volume);
+    volume.connect(chatAudioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.2);
+  } catch (error) {
+    console.error("Unable to play chat notification sound", error);
+  }
+}
+
 interface ChatUser {
   id: number;
   name: string;
+  online: boolean;
 }
 
 interface ChatMessage {
@@ -60,6 +92,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
   const [sending, setSending] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const notifiedMessageIdsRef = useRef(new Set<number>());
   const selectedUserRef = useRef<ChatUser | null>(null);
   const currentUserIdRef = useRef<number | null>(null);
   const openRef = useRef(open);
@@ -123,6 +156,13 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
               return next;
             });
           } else if (data.type === "message" && data.message) {
+            if (
+              data.message.senderUserId !== currentUserIdRef.current &&
+              !notifiedMessageIdsRef.current.has(data.message.id)
+            ) {
+              notifiedMessageIdsRef.current.add(data.message.id);
+              playMessageDing();
+            }
             const peerId = data.message.senderUserId === currentUserIdRef.current
               ? data.message.recipientUserId
               : data.message.senderUserId;
@@ -226,7 +266,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
             ? "flex h-dvh w-full flex-col overflow-hidden bg-white"
             : "mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl"}
         >
-          <header className="flex items-center justify-between bg-[#203b2c] px-4 py-3 text-white">
+          <header className="flex items-center justify-between bg-[#263188] px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-2">
               {selectedUser && (
                 <button
@@ -263,7 +303,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
           {!selectedUser ? (
             <div className="flex-1 overflow-y-auto p-3">
               {users.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-stone-500">No other staff are online right now.</p>
+                <p className="px-3 py-8 text-center text-sm text-stone-500">No other staff or admins found.</p>
               ) : (
                 <ul className="space-y-1">
                   {users.map((user) => (
@@ -273,9 +313,9 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                         onClick={() => selectUser(user)}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-stone-50"
                       >
-                        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#edf1eb] font-semibold text-[#203b2c]">
+                        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef0ff] font-semibold text-[#263188]">
                           {user.name.slice(0, 1).toUpperCase()}
-                          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500" />
+                          <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${user.online ? "bg-green-500" : "bg-gray-400"}`} />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-stone-800">{user.name}</span>
                         {unreadUsers.has(user.id) && <span className="h-2.5 w-2.5 rounded-full bg-amber-600" aria-label="Unread message" />}
@@ -295,7 +335,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                   const mine = message.senderUserId === currentUserId;
                   return (
                     <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? "rounded-br-sm bg-[#203b2c] text-white" : "rounded-bl-sm bg-white text-stone-800 shadow-sm"}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? "rounded-br-sm bg-[#263188] text-white" : "rounded-bl-sm bg-white text-stone-800 shadow-sm"}`}>
                         <p className="whitespace-pre-wrap break-words text-sm">{message.message}</p>
                         <time className={`mt-1 block text-right text-[10px] ${mine ? "text-white/60" : "text-stone-400"}`}>
                           {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -320,13 +360,13 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                   placeholder="Write a message…"
                   rows={1}
                   maxLength={2000}
-                  className="max-h-24 min-h-10 flex-1 resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-[#597a62]"
+                  className="max-h-24 min-h-10 flex-1 resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-[#3945aa]"
                 />
                 <button
                   type="submit"
                   disabled={!draft.trim() || sending || !connected}
                   aria-label="Send message"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#203b2c] text-white hover:bg-[#31553f] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#263188] text-white hover:bg-[#3945aa] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send size={17} />
                 </button>
@@ -342,7 +382,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
           aria-label={open ? "Close team chat" : "Open team chat"}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#203b2c] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#31553f]"
+          className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#263188] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#3945aa]"
         >
           {open ? <X size={20} /> : <MessageCircle size={20} />}
           <span>{open ? "Close" : "Chat"}</span>

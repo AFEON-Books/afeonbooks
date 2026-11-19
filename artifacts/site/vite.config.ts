@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { randomUUID } from "node:crypto";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
@@ -13,13 +14,28 @@ if (Number.isNaN(port) || port <= 0) {
 
 const basePath = process.env.BASE_PATH ?? "/";
 const apiProxyTarget = process.env.API_URL ?? "https://api-usw-2.afeonbooks.com";
+const deploymentVersion = randomUUID();
 
 export default defineConfig({
   base: basePath,
+  define: {
+    __DEPLOYMENT_VERSION__: JSON.stringify(deploymentVersion),
+  },
   plugins: [
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    {
+      name: "deployment-version",
+      apply: "build",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "deployment-version.json",
+          source: JSON.stringify({ version: deploymentVersion }),
+        });
+      },
+    },
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
