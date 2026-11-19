@@ -9,7 +9,6 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Github } from "lucide-react";
 import { Toaster } from "sonner";
-import { ChatWidget } from "@/components/ChatWidget";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,8 @@ import ZohoMail from "@/pages/zoho-mail";
 import SiteEditor from "@/pages/site-editor";
 import { MaintenancePage } from "@/pages/maintenance";
 import AdminHub from "@/pages/admin-hub";
+import CustomerSupportPage from "@/pages/customer-support";
+import SlackWorkspace from "@/components/SlackWorkspace";
 
 const queryClient = new QueryClient();
 
@@ -710,7 +711,7 @@ function AdminHome() {
 }
 
 function ChatPage() {
-  return <ChatWidget fullPage />;
+  return <SlackWorkspace />;
 }
 
 function Router() {
@@ -732,6 +733,8 @@ function Router() {
       <Route path="/maintenance/" component={MaintenanceRoute} />
       <Route path="/chat" component={ChatPage} />
       <Route path="/chat/" component={ChatPage} />
+      <Route path="/support-chat" component={CustomerSupportPage} />
+      <Route path="/support-chat/" component={CustomerSupportPage} />
       <Route path="/pos" component={Pos} />
       <Route path="/pos/" component={Pos} />
       <Route path="/zoho-mail" component={ZohoMail} />

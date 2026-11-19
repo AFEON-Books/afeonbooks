@@ -59,7 +59,7 @@ function allowedAdminReturnUrl(value: string | undefined): string | undefined {
   if (value.length > 1900) return undefined;
   try {
     const target = new URL(value);
-    const allowed = (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/", "/chat", "/chat/"].includes(target.pathname))
+    const allowed = (target.origin === "https://usw-2.afeonbooks.com" && ["/", "/main-admin", "/main-admin/", "/site-editor", "/site-editor/", "/pos", "/pos/", "/zoho-mail", "/zoho-mail/", "/maintenance", "/maintenance/", "/status-edit", "/status-edit/", "/chat", "/chat/", "/support-chat", "/support-chat/"].includes(target.pathname))
       || target.origin === "https://mailsystem.afeonbooks.com"
       || (target.origin === "https://source.afeonbooks.com" && ["/", "/source", "/source/", "/infra", "/infra/"].includes(target.pathname));
     return allowed && !target.username && !target.password ? target.toString() : undefined;

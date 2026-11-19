@@ -49,8 +49,14 @@ const tools: Array<{
   },
   {
     name: "Team Chat",
-    description: "Message staff and check who is online.",
+    description: "Message staff in channels and group chats, and start calls.",
     href: "/chat",
+    icon: MessageCircle,
+  },
+  {
+    name: "Customer Support",
+    description: "Open the customer inbox and reply to website visitors.",
+    href: "/support-chat",
     icon: MessageCircle,
   },
   {
@@ -182,7 +188,7 @@ export default function AdminHub() {
             >
               Store &amp; team
             </h2>
-            <span className="text-xs text-black/40">01 — 05</span>
+            <span className="text-xs text-black/40">01 — 06</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {tools.slice(0, 5).map((tool) => (
@@ -199,7 +205,7 @@ export default function AdminHub() {
             >
               Operations &amp; services
             </h2>
-            <span className="text-xs text-black/40">06 — 12</span>
+            <span className="text-xs text-black/40">07 — 13</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {tools.slice(5).map((tool) => (

@@ -232,12 +232,15 @@ function maintenanceResponse() {
   );
 }
 
-function addSecurityHeaders(response) {
+function addSecurityHeaders(response, hostname) {
   const headers = new Headers(response.headers);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  const mediaPolicy = hostname === "usw-2.afeonbooks.com"
+    ? "camera=(self), microphone=(self), geolocation=()"
+    : "camera=(), microphone=(), geolocation=()";
+  headers.set("Permissions-Policy", mediaPolicy);
   headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return new Response(response.body, {
     status: response.status,
@@ -519,6 +522,8 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     ["/status-edit/", "/admin/"],
     ["/chat", "/admin/"],
     ["/chat/", "/admin/"],
+    ["/support-chat", "/admin/"],
+    ["/support-chat/", "/admin/"],
   ]);
   if (request.method === "GET" && adminAppRoutes.has(path)) {
     return env.ASSETS.fetch(new Request(new URL(adminAppRoutes.get(path), request.url), request));
@@ -593,12 +598,12 @@ export default {
     try {
       const response = await handleRequest(request, env);
       if (response.status === 502 || response.status === 503) {
-        return addSecurityHeaders(maintenanceResponse());
+        return addSecurityHeaders(maintenanceResponse(), new URL(request.url).hostname);
       }
-      return addSecurityHeaders(response);
+      return addSecurityHeaders(response, new URL(request.url).hostname);
     } catch (error) {
       console.error("Worker request failed; serving maintenance page", error);
-      return addSecurityHeaders(maintenanceResponse());
+      return addSecurityHeaders(maintenanceResponse(), new URL(request.url).hostname);
     }
   },
 };

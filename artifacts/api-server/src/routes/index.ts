@@ -13,6 +13,7 @@ import devEventsRouter from "./dev-events";
 import marketingRouter from "./marketing";
 import mailboxRouter from "./mailbox";
 import chatRouter from "./chat";
+import supportChatRouter from "./support-chat";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(devEventsRouter);
 router.use(marketingRouter);
 router.use(mailboxRouter);
 router.use(chatRouter);
+router.use(supportChatRouter);
 
 export default router;

@@ -271,7 +271,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
             ? "flex h-dvh w-full flex-col overflow-hidden bg-white"
             : "mb-3 flex h-[min(34rem,calc(100dvh-7rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl"}
         >
-          <header className="flex items-center justify-between bg-[#263188] px-4 py-3 text-white">
+          <header className="flex items-center justify-between bg-[#80d7f6] px-4 py-3 text-[#111111]">
             <div className="flex min-w-0 items-center gap-2">
               {selectedUser && (
                 <button
@@ -282,7 +282,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                     setMessages([]);
                     setError("");
                   }}
-                  className="rounded-full p-1 hover:bg-white/10"
+                  className="rounded-full p-1 hover:bg-black/10"
                 >
                   <ArrowLeft size={18} />
                 </button>
@@ -291,7 +291,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                 <h2 className="truncate text-sm font-semibold">
                   {selectedUser?.name ?? "Team chat"}
                 </h2>
-                <p className="text-xs text-white/70">
+                <p className="text-xs text-black/70">
                   {selectedUser
                     ? activeSelectedUser?.online ? "Online now" : "Offline"
                     : `${onlineUserCount} staff online${connected ? " · Live" : " · Reconnecting…"}`}
@@ -299,7 +299,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
               </div>
             </div>
             {!fullPage && (
-              <button type="button" aria-label="Close chat" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10">
+              <button type="button" aria-label="Close chat" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-black/10">
                 <X size={18} />
               </button>
             )}
@@ -318,7 +318,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                         onClick={() => selectUser(user)}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-stone-50"
                       >
-                        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef0ff] font-semibold text-[#263188]">
+                        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#80d7f6]/20 font-semibold text-[#236078]">
                           {user.name.slice(0, 1).toUpperCase()}
                           <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${user.online ? "bg-green-500" : "bg-gray-400"}`} />
                         </span>
@@ -340,9 +340,9 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                   const mine = message.senderUserId === currentUserId;
                   return (
                     <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? "rounded-br-sm bg-[#263188] text-white" : "rounded-bl-sm bg-white text-stone-800 shadow-sm"}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? "rounded-br-sm bg-[#80d7f6] text-[#111111]" : "rounded-bl-sm bg-white text-stone-800 shadow-sm"}`}>
                         <p className="whitespace-pre-wrap break-words text-sm">{message.message}</p>
-                        <time className={`mt-1 block text-right text-[10px] ${mine ? "text-white/60" : "text-stone-400"}`}>
+                        <time className={`mt-1 block text-right text-[10px] ${mine ? "text-black/60" : "text-stone-400"}`}>
                           {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                         </time>
                       </div>
@@ -365,13 +365,13 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
                   placeholder="Write a message…"
                   rows={1}
                   maxLength={2000}
-                  className="max-h-24 min-h-10 flex-1 resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-[#3945aa]"
+                  className="max-h-24 min-h-10 flex-1 resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-[#80d7f6]"
                 />
                 <button
                   type="submit"
                   disabled={!draft.trim() || sending || !connected}
                   aria-label="Send message"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#263188] text-white hover:bg-[#3945aa] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#80d7f6] text-[#111111] hover:bg-[#6ac9eb] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send size={17} />
                 </button>
@@ -387,7 +387,7 @@ export function ChatWidget({ fullPage = false }: { fullPage?: boolean }) {
           aria-label={open ? "Close team chat" : "Open team chat"}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#263188] px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#3945aa]"
+          className="ml-auto flex h-14 items-center gap-2 rounded-full bg-[#80d7f6] px-5 text-sm font-semibold text-[#111111] shadow-lg transition hover:bg-[#6ac9eb]"
         >
           {open ? <X size={20} /> : <MessageCircle size={20} />}
           <span>{open ? "Close" : "Chat"}</span>

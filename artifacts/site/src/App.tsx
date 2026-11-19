@@ -26,6 +26,7 @@ import React from 'react';
 import { StatusBanner } from "@/components/status-banner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { CookieBanner } from "@/components/cookie-banner";
+import { CustomerSupportChat } from "@/components/customer-support-chat";
 import { setBaseUrl } from "@workspace/api-client-react";
 
 const apiBaseUrl = import.meta.env.VITE_API_URL;
@@ -207,6 +208,7 @@ function App() {
   useImageProtection();
   useDevAudit();
   const isMailHost = window.location.hostname === "mailsystem.afeonbooks.com";
+  const isAuthHost = window.location.hostname === "authn.afeonbooks.com";
   const isStaffAuthFlow = window.location.hostname === "authn.afeonbooks.com"
     && new URLSearchParams(window.location.search).has("return_to");
   return (
@@ -221,6 +223,7 @@ function App() {
             </WouterRouter>
             <Toaster />
             {!isMailHost && !isStaffAuthFlow && <CookieBanner />}
+            {!isMailHost && !isAuthHost && !isStaffAuthFlow && <CustomerSupportChat />}
           </TooltipProvider>
         </CartProvider>
         </AuthProvider>
