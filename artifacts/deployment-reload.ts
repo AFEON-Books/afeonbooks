@@ -1,6 +1,7 @@
 declare const __DEPLOYMENT_VERSION__: string;
 
 const CHECK_INTERVAL_MS = 60_000;
+const RELOADED_VERSION_KEY = "afeonbooks_reloaded_deployment_version";
 
 export function startDeploymentReloadMonitor(): void {
   if (!import.meta.env.PROD) return;
@@ -33,8 +34,13 @@ export function startDeploymentReloadMonitor(): void {
       }
 
       if (payload.version !== __DEPLOYMENT_VERSION__) {
+        if (sessionStorage.getItem(RELOADED_VERSION_KEY) === payload.version) return;
+        sessionStorage.setItem(RELOADED_VERSION_KEY, payload.version);
         window.location.reload();
+        return;
       }
+
+      sessionStorage.removeItem(RELOADED_VERSION_KEY);
     } catch (error) {
       console.warn("Unable to check for a new deployment", error);
     } finally {
