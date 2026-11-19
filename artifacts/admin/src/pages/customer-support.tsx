@@ -36,6 +36,7 @@ export default function CustomerSupportPage() {
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -113,7 +114,7 @@ export default function CustomerSupportPage() {
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = draft.trim();
-    if (!message || sending || selectedId === null) return;
+    if (!message || sending || selectedId === null || status === "closed") return;
     setSending(true);
     setError("");
     try {
@@ -136,8 +137,9 @@ export default function CustomerSupportPage() {
   };
 
   const updateStatus = async () => {
-    if (selectedId === null) return;
+    if (selectedId === null || closing) return;
     const nextStatus = status === "open" ? "closed" : "open";
+    if (nextStatus === "closed") setClosing(true);
     try {
       const response = await fetch(`/api/support-chat/admin/conversations/${selectedId}`, {
         method: "PATCH",
@@ -146,10 +148,21 @@ export default function CustomerSupportPage() {
         body: JSON.stringify({ status: nextStatus }),
       });
       if (!response.ok) throw new Error(await readError(response, "Unable to update this conversation."));
-      setStatus(nextStatus);
+      const result = await response.json() as {
+        conversation: { status: "open" | "closed" };
+        endedMessage?: SupportMessage;
+      };
+      setStatus(result.conversation.status);
+      if (result.endedMessage) {
+        setMessages((current) => current.some((item) => item.id === result.endedMessage!.id)
+          ? current
+          : [...current, result.endedMessage!]);
+      }
       void loadConversations();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to update this conversation.");
+    } finally {
+      setClosing(false);
     }
   };
 
@@ -208,9 +221,9 @@ export default function CustomerSupportPage() {
                     <p className="text-xs text-black/50">{status === "open" ? "Open conversation" : "Closed conversation"}</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => void updateStatus()} className="inline-flex items-center gap-2 rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5">
+                <button type="button" onClick={() => void updateStatus()} disabled={closing} className="inline-flex items-center gap-2 rounded-md border border-black/15 px-3 py-2 text-xs font-semibold hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50">
                   <Check size={15} />
-                  {status === "open" ? "Close conversation" : "Reopen"}
+                  {closing ? "Ending session…" : status === "open" ? "Close conversation" : "Reopen"}
                 </button>
               </header>
               <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
@@ -235,6 +248,7 @@ export default function CustomerSupportPage() {
                   aria-label="Write a customer support reply"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value.slice(0, 2000))}
+                  disabled={status === "closed"}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -246,7 +260,7 @@ export default function CustomerSupportPage() {
                   maxLength={2000}
                   className="max-h-28 min-h-11 flex-1 resize-none rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#80d7f6]"
                 />
-                <button type="submit" disabled={!draft.trim() || sending} aria-label="Send reply" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#80d7f6] text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40">
+                <button type="submit" disabled={!draft.trim() || sending || status === "closed"} aria-label="Send reply" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#80d7f6] text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40">
                   <Send size={17} />
                 </button>
               </form>

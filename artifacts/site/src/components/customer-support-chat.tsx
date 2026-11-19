@@ -33,6 +33,7 @@ export function CustomerSupportChat() {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<"open" | "closed">("open");
   const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollingRef = useRef(false);
@@ -80,6 +81,7 @@ export function CustomerSupportChat() {
         const result = await response.json() as SupportMessagesResponse;
         if (!controller.signal.aborted) {
           setMessages(result.messages);
+          setStatus(result.status);
           setError("");
         }
       } catch (cause) {
@@ -105,7 +107,7 @@ export function CustomerSupportChat() {
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = draft.trim();
-    if (!message || sending || conversationId === null) return;
+    if (!message || sending || conversationId === null || status === "closed") return;
     setSending(true);
     setError("");
     try {
@@ -163,6 +165,11 @@ export function CustomerSupportChat() {
             })}
             <div ref={messagesEndRef} />
           </div>
+          {status === "closed" ? (
+            <div className="border-t border-stone-100 bg-stone-50 px-3 py-3 text-center text-xs font-medium text-stone-600">
+              This support session has ended.
+            </div>
+          ) : (
           <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-stone-100 p-3">
             <textarea
               aria-label="Write a support message"
@@ -188,6 +195,7 @@ export function CustomerSupportChat() {
               <Send size={17} />
             </button>
           </form>
+          )}
           {error && <p role="alert" className="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
         </section>
       )}

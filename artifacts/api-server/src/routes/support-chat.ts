@@ -9,6 +9,7 @@ const router: IRouter = Router();
 const CUSTOMER_COOKIE = "afeonbooks_support_chat";
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
 const MAX_MESSAGE_LENGTH = 2_000;
+const SESSION_ENDED_MESSAGE = "Session ended. Thanks!";
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 let rateLimitCleanupAt = 0;
 
@@ -147,6 +148,10 @@ router.post("/support-chat/messages", async (request, response): Promise<void> =
   if (!requireAllowedOrigin(request, response)) return;
   const conversation = await findCustomerConversation(request, response);
   if (!conversation) return;
+  if (conversation.status === "closed") {
+    response.status(409).json({ error: "This support session has ended." });
+    return;
+  }
 
   const message = typeof request.body?.message === "string" ? request.body.message.trim() : "";
   if (!message || message.length > MAX_MESSAGE_LENGTH) {
@@ -174,7 +179,6 @@ router.post("/support-chat/messages", async (request, response): Promise<void> =
       });
     await tx.update(supportConversationsTable)
       .set({
-        status: "open",
         updatedAt: now,
         lastCustomerMessageAt: now,
       })
@@ -247,12 +251,19 @@ router.post("/support-chat/admin/conversations/:id/messages", requireUser, requi
     response.status(400).json({ error: `Choose a conversation and enter 1 to ${MAX_MESSAGE_LENGTH} characters.` });
     return;
   }
-  const [conversation] = await db.select({ id: supportConversationsTable.id })
+  const [conversation] = await db.select({
+    id: supportConversationsTable.id,
+    status: supportConversationsTable.status,
+  })
     .from(supportConversationsTable)
     .where(eq(supportConversationsTable.id, id))
     .limit(1);
   if (!conversation) {
     response.status(404).json({ error: "Support conversation not found." });
+    return;
+  }
+  if (conversation.status === "closed") {
+    response.status(409).json({ error: "This support session has ended." });
     return;
   }
   const [savedMessage] = await db.transaction(async (tx) => {
@@ -285,15 +296,52 @@ router.patch("/support-chat/admin/conversations/:id", requireUser, requireStaffA
     response.status(400).json({ error: "Choose a valid support conversation status." });
     return;
   }
-  const [conversation] = await db.update(supportConversationsTable)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(supportConversationsTable.id, id))
-    .returning({ id: supportConversationsTable.id, status: supportConversationsTable.status });
+  const [conversation] = await db.transaction(async (tx) => {
+    const [current] = await tx.select({
+      id: supportConversationsTable.id,
+      status: supportConversationsTable.status,
+    })
+      .from(supportConversationsTable)
+      .where(eq(supportConversationsTable.id, id))
+      .limit(1);
+    if (!current) return [];
+
+    const now = new Date();
+    let endedMessage: {
+      id: number;
+      senderType: string;
+      senderUserId: number | null;
+      message: string;
+      createdAt: Date;
+    } | undefined;
+    if (status === "closed" && current.status !== "closed") {
+      const [inserted] = await tx.insert(supportMessagesTable)
+        .values({
+          conversationId: id,
+          senderType: "staff",
+          senderUserId: request.user!.id,
+          message: SESSION_ENDED_MESSAGE,
+        })
+        .returning({
+          id: supportMessagesTable.id,
+          senderType: supportMessagesTable.senderType,
+          senderUserId: supportMessagesTable.senderUserId,
+          message: supportMessagesTable.message,
+          createdAt: supportMessagesTable.createdAt,
+        });
+      endedMessage = inserted;
+    }
+    const [updated] = await tx.update(supportConversationsTable)
+      .set({ status, updatedAt: now })
+      .where(eq(supportConversationsTable.id, id))
+      .returning({ id: supportConversationsTable.id, status: supportConversationsTable.status });
+    return [{ conversation: updated, endedMessage }];
+  });
   if (!conversation) {
     response.status(404).json({ error: "Support conversation not found." });
     return;
   }
-  response.json({ conversation });
+  response.json(conversation);
 });
 
 export default router;

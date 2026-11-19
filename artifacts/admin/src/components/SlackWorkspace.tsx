@@ -59,6 +59,14 @@ interface RoomMessage {
 
 type Target = { kind: "dm"; user: ChatUser } | { kind: "room"; room: Room };
 type MediaType = "audio" | "video";
+type MentionSuggestion =
+  | { kind: "person"; id: number; label: string; detail: string }
+  | { kind: "role"; id: string; label: string; detail: string };
+interface MentionRange {
+  start: number;
+  end: number;
+  query: string;
+}
 interface IncomingCall {
   callId: string;
   callerUserId: number;
@@ -143,6 +151,18 @@ function sendEvent(socket: WebSocket | null, event: object): boolean {
   return true;
 }
 
+function getMentionRange(value: string, cursor: number, selectionEnd = cursor): MentionRange | null {
+  if (cursor !== selectionEnd) return null;
+  const beforeCursor = value.slice(0, cursor);
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(beforeCursor);
+  if (!match) return null;
+  return {
+    start: match.index + match[0].lastIndexOf("@"),
+    end: cursor,
+    query: match[1]!.toLowerCase(),
+  };
+}
+
 async function readError(response: Response, fallback: string): Promise<string> {
   try {
     const body = await response.json() as { error?: string };
@@ -162,6 +182,8 @@ export default function SlackWorkspace() {
   const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [mentionRange, setMentionRange] = useState<MentionRange | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -186,6 +208,7 @@ export default function SlackWorkspace() {
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
   const roomPollRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
   currentUserIdRef.current = currentUserId;
   selectedRef.current = target;
@@ -540,6 +563,35 @@ export default function SlackWorkspace() {
     }
   };
 
+  const mentionSuggestions: MentionSuggestion[] = target?.kind === "room" && mentionRange
+    ? [
+      { kind: "role" as const, id: "staff", label: "staff", detail: "Staff role" },
+      { kind: "role" as const, id: "admin", label: "admin", detail: "Admin role" },
+      ...users.map((user) => ({
+        kind: "person" as const,
+        id: user.id,
+        label: user.name,
+        detail: user.online ? "Online" : "Staff member",
+      })),
+    ]
+      .filter((suggestion) => suggestion.label.toLowerCase().includes(mentionRange.query))
+      .slice(0, 8)
+    : [];
+
+  const insertMention = (suggestion: MentionSuggestion) => {
+    if (!mentionRange) return;
+    const insertion = `@${suggestion.label} `;
+    const nextDraft = `${draft.slice(0, mentionRange.start)}${insertion}${draft.slice(mentionRange.end)}`.slice(0, 2000);
+    const cursor = Math.min(mentionRange.start + insertion.length, nextDraft.length);
+    setDraft(nextDraft);
+    setMentionRange(null);
+    setMentionIndex(0);
+    requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.setSelectionRange(cursor, cursor);
+    });
+  };
+
   const createRoom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!showCreateRoom || !roomName.trim() || creatingRoom) return;
@@ -776,13 +828,62 @@ export default function SlackWorkspace() {
                 })}
               <div ref={messagesEndRef} />
             </div>
-            <form onSubmit={sendMessage} className="mx-4 mb-4 flex items-end gap-2 rounded-xl border border-black/20 bg-white p-2 sm:mx-8">
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value.slice(0, 2000))} onKeyDown={(event) => {
+            <form onSubmit={sendMessage} className="relative mx-4 mb-4 flex items-end gap-2 rounded-xl border border-black/20 bg-white p-2 sm:mx-8">
+              {mentionSuggestions.length > 0 && (
+                <div role="listbox" aria-label="Mention suggestions" className="absolute bottom-full left-0 z-10 mb-2 max-h-64 w-72 overflow-y-auto rounded-lg border border-black/10 bg-white p-1 shadow-xl">
+                  {mentionSuggestions.map((suggestion, index) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={index === mentionIndex}
+                      key={`${suggestion.kind}:${suggestion.id}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => insertMention(suggestion)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm ${index === mentionIndex ? "bg-[#80d7f6]/30" : "hover:bg-black/5"}`}
+                    >
+                      <span className="truncate font-medium">@{suggestion.label}</span>
+                      <span className="shrink-0 text-xs text-black/45">{suggestion.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea ref={messageInputRef} value={draft} onChange={(event) => {
+                const nextDraft = event.target.value.slice(0, 2000);
+                setDraft(nextDraft);
+                const nextRange = getMentionRange(nextDraft, event.target.selectionStart, event.target.selectionEnd);
+                setMentionRange(nextRange);
+                setMentionIndex(0);
+              }} onClick={(event) => {
+                setMentionRange(getMentionRange(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd));
+              }} onKeyDown={(event) => {
+                if (mentionSuggestions.length > 0 && event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setMentionIndex((index) => (index + 1) % mentionSuggestions.length);
+                  return;
+                }
+                if (mentionSuggestions.length > 0 && event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setMentionIndex((index) => (index - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+                  return;
+                }
+                if (mentionSuggestions.length > 0 && event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  insertMention(mentionSuggestions[mentionIndex]!);
+                  return;
+                }
+                if (event.key === "Escape" && mentionRange) {
+                  setMentionRange(null);
+                  return;
+                }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
                 }
-              }} placeholder={`Message ${target.kind === "room" ? target.room.type === "channel" ? `#${target.room.name}` : target.room.name : target.user.name}`} rows={1} maxLength={2000} aria-label="Write a message" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
+              }} onKeyUp={(event) => {
+                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                  setMentionRange(getMentionRange(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd));
+                }
+              }} placeholder={`Message ${target.kind === "room" ? target.room.type === "channel" ? `#${target.room.name}` : target.room.name : target.user.name}`} rows={1} maxLength={2000} aria-label="Write a message" aria-autocomplete="list" aria-expanded={mentionSuggestions.length > 0} className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
               <button type="submit" disabled={!draft.trim() || sending || !connected} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#80d7f6] text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40"><Send size={17} /></button>
             </form>
           </>
