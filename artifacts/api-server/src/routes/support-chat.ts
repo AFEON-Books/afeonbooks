@@ -9,7 +9,7 @@ const router: IRouter = Router();
 const CUSTOMER_COOKIE = "afeonbooks_support_chat";
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
 const MAX_MESSAGE_LENGTH = 2_000;
-const SESSION_ENDED_MESSAGE = "Session ended. Thanks!";
+const SESSION_ENDED_MESSAGE = "Thank you for chatting with AFEON Books. Your session has ended. If you have further questions, please start a new support chat.";
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 let rateLimitCleanupAt = 0;
 
