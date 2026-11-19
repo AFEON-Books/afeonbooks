@@ -250,57 +250,6 @@ function directoryKeyMatches(url, env) {
   return typeof env.DIRECTORY_KEY === "string" && env.DIRECTORY_KEY.length > 0 && url.searchParams.get("key") === env.DIRECTORY_KEY;
 }
 
-async function getAdminUserFromSession(request) {
-  const cookie = request.headers.get("Cookie");
-  const headers = new Headers({ Accept: "application/json" });
-  if (cookie) headers.set("Cookie", cookie);
-  const sessionResponse = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/auth/me", {
-    headers,
-    redirect: "manual",
-  }));
-  if (!sessionResponse.ok) {
-    throw new Error(`Account session check failed with status ${sessionResponse.status}`);
-  }
-  const sessionPayload = await sessionResponse.json();
-  if (!sessionPayload || !Object.hasOwn(sessionPayload, "user")) {
-    throw new Error("Account session check returned an invalid response");
-  }
-  const user = sessionPayload.user ?? null;
-  if (!user || (user.role !== "staff" && user.role !== "admin")) {
-    return { user, organizationVerified: false };
-  }
-
-  const accessResponse = await fetchApiRequest(new Request("https://api-usw-2.afeonbooks.com/api/auth/admin/access", {
-    headers,
-    redirect: "manual",
-  }));
-  if (accessResponse.status === 401) return { user: null, organizationVerified: false };
-  if (accessResponse.status === 403) return { user, organizationVerified: false };
-  if (!accessResponse.ok) {
-    throw new Error(`Admin organization check failed with status ${accessResponse.status}`);
-  }
-  return { user, organizationVerified: true };
-}
-
-function githubOrganizationRedirect(request) {
-  const signInUrl = new URL("https://authn.afeonbooks.com/account");
-  signInUrl.searchParams.set("return_to", request.url);
-  return Response.redirect(signInUrl.toString(), 302);
-}
-
-function sourceAuthError(status, message) {
-  return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg"><title>Unable to verify access</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:38rem;margin:12vh auto;padding:24px;color:#171717;background:#f5f3ee}main{background:#fff;padding:32px;border:1px solid #ddd}a{color:#111827;font-weight:600}</style></head><body><main><h1>Unable to verify staff access</h1><p>${message}</p><p><a href="https://authn.afeonbooks.com/account?return_to=https%3A%2F%2Fusw-2.afeonbooks.com%2F">Sign in with GitHub</a></p></main></body></html>`,
-    {
-      status,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    },
-  );
-}
-
 function sourceDashboardHtml() {
   const panels = [
     { name: "GitHub", url: "https://github.com/acdu1/afeonbooks", embed: false },
@@ -473,117 +422,6 @@ function sourceDashboardHtml() {
 </html>`;
 }
 
-function adminHubHtml() {
-  const panels = [
-    { name: "Main Admin", description: "Manage orders, products, users, and store settings.", url: "/main-admin#orders", logo: "ADM", local: true },
-    { name: "Site Editor", description: "Edit the website content and storefront settings.", url: "/site-editor#site-editor", logo: "EDIT", local: true },
-    { name: "POS Checkout", description: "Process in-person orders and payments.", url: "/pos", logo: "POS", local: true },
-    { name: "Zoho Mail", description: "Open the staff mailbox and email tools.", url: "/zoho-mail", logo: "MAIL", local: true },
-    { name: "GitHub", description: "Repository and source control.", url: "https://github.com/acdu1/afeonbooks", logo: "GH" },
-    { name: "GitHub Codespaces", description: "Open the online development workspace.", url: "https://ubiquitous-guacamole-x545p5p7996439pxj.github.dev/", logo: "CS" },
-    { name: "Cloudflare", description: "Worker, DNS, and domain settings.", url: "https://dash.cloudflare.com/a130548b1748b2365a5c0e027fe3ebd8/home", logo: "CF" },
-    { name: "Supabase", description: "Database and project storage.", url: "https://supabase.com/dashboard/project/msxfhfdeqxqvjuypcspm", logo: "SB" },
-    { name: "Render", description: "API service and deployment settings.", url: "https://dashboard.render.com/web/srv-da57c6jbc2fs738388lg", logo: "R" },
-    { name: "StatusPage", description: "Service status and incident updates.", url: "https://status.afeonbooks.com/", logo: "SP" },
-    { name: "Reedsy Book Editor", description: "Open the book editing workspace.", url: "https://editor.reedsy.com/", logo: "B" },
-  ];
-
-  const cards = panels
-    .map(
-      ({ name, description, url, logo, local }) => `
-        <a class="card${local ? " card-primary" : ""}" href="${url}"${local ? "" : ' target="_blank" rel="noopener noreferrer"'}>
-          <span class="logo" aria-hidden="true">${logo}</span>
-          <span class="card-copy">
-            <span class="card-title">${name}</span>
-            <span class="card-description">${description}</span>
-          </span>
-          <span class="arrow" aria-hidden="true">↗</span>
-        </a>
-      `,
-    )
-    .join("");
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/svg+xml" href="https://afeonbooks.com/favicon.svg">
-    <title>AFEON Books Admin</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --bg: #f5f3ee;
-        --panel: #fff;
-        --text: #171717;
-        --muted: #656565;
-        --border: rgba(23, 23, 23, 0.12);
-        --accent: #111827;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--bg);
-        color: var(--text);
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      main { width: min(1120px, 100%); margin: 0 auto; padding: 48px 24px 64px; }
-      .eyebrow { color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; }
-      h1 { margin: 8px 0 8px; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.08; letter-spacing: -.04em; }
-      .intro { margin: 0 0 32px; color: var(--muted); font-size: 1rem; line-height: 1.6; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-      .card {
-        display: flex;
-        min-height: 112px;
-        align-items: center;
-        gap: 16px;
-        padding: 20px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--panel);
-        color: inherit;
-        text-decoration: none;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, .03);
-        transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-      }
-      .card:hover { transform: translateY(-2px); border-color: rgba(23, 23, 23, .3); box-shadow: 0 8px 20px rgba(0, 0, 0, .08); }
-      .card:focus-visible { outline: 3px solid #3478f6; outline-offset: 3px; }
-      .card-primary { border-color: rgba(17, 24, 39, .3); }
-      .logo {
-        display: grid;
-        width: 52px;
-        height: 52px;
-        flex: 0 0 52px;
-        place-items: center;
-        border-radius: 12px;
-        background: #f0eee9;
-        color: #242424;
-        font-size: 13px;
-        font-weight: 800;
-        letter-spacing: -.04em;
-      }
-      .card-primary .logo { background: var(--accent); color: #fff; font-size: 11px; }
-      .card-copy { display: grid; gap: 5px; }
-      .card-title { font-size: 1rem; font-weight: 750; }
-      .card-description { color: var(--muted); font-size: .84rem; line-height: 1.4; }
-      .arrow { margin-left: auto; align-self: flex-start; color: var(--muted); font-size: 18px; }
-      @media (max-width: 600px) { main { padding: 32px 16px 48px; } .card { min-height: 96px; padding: 16px; } }
-    </style>
-  </head>
-  <body>
-    <main>
-      <div class="eyebrow">AFEON Books</div>
-      <h1>Admin Hub</h1>
-      <p class="intro">Choose a tool to manage the store, website, or its supporting services.</p>
-      <nav class="grid" aria-label="Admin tools">
-        ${cards}
-      </nav>
-    </main>
-  </body>
-</html>`;
-}
-
 function directoryResponse(status = 404, body = "Not Found") {
   return new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 }
@@ -665,33 +503,8 @@ if (url.hostname === "usw-2.afeonbooks.com") {
     return fetchApiRequest(request);
   }
 
-  if (path === "/" && request.method === "GET") {
-    let user;
-    try {
-      user = await getAdminUserFromSession(request);
-    } catch (error) {
-      console.error(JSON.stringify({
-        message: "Admin hub session check failed",
-        error: error instanceof Error ? error.message : String(error),
-      }));
-      return sourceAuthError(503, "The session check failed. Please try again shortly.");
-    }
-
-    if (!user?.user) return githubOrganizationRedirect(request);
-    if (user.user.role !== "staff" && user.user.role !== "admin") {
-      return sourceAuthError(403, "A staff or admin account is required to access this dashboard.");
-    }
-    if (!user.organizationVerified) return githubOrganizationRedirect(request);
-
-    return new Response(adminHubHtml(), {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
-  }
-
   const adminAppRoutes = new Map([
+    ["/", "/admin/"],
     ["/main-admin", "/admin/"],
     ["/main-admin/", "/admin/"],
     ["/site-editor", "/admin/"],
