@@ -24,6 +24,7 @@ import ZohoMail from "@/pages/zoho-mail";
 import SiteEditor from "@/pages/site-editor";
 import { MaintenancePage } from "@/pages/maintenance";
 import CustomerSupportPage from "@/pages/customer-support";
+import CalendarPage from "@/pages/calendar";
 import SlackWorkspace from "@/components/SlackWorkspace";
 
 const queryClient = new QueryClient();
@@ -736,6 +737,8 @@ function Router() {
       <Route path="/chat/" component={ChatPage} />
       <Route path="/support-chat" component={CustomerSupportPage} />
       <Route path="/support-chat/" component={CustomerSupportPage} />
+      <Route path="/calendar" component={CalendarPage} />
+      <Route path="/calendar/" component={CalendarPage} />
       <Route path="/pos" component={Pos} />
       <Route path="/pos/" component={Pos} />
       <Route path="/zoho-mail" component={ZohoMail} />

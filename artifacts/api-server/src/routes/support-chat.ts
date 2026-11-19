@@ -92,8 +92,17 @@ router.post("/support-chat/session", async (request, response): Promise<void> =>
   if (!requireAllowedOrigin(request, response)) return;
   const existing = await findExistingConversation(request);
   if (existing) {
-    response.json({ conversationId: existing.id });
-    return;
+    if (existing.status === "open") {
+      response.json({ conversationId: existing.id });
+      return;
+    }
+    response.clearCookie(CUSTOMER_COOKIE, {
+      httpOnly: true,
+      secure: IS_PRODUCTION,
+      sameSite: "lax",
+      domain: IS_PRODUCTION ? ".afeonbooks.com" : undefined,
+      path: "/api/support-chat",
+    });
   }
 
   const ip = request.get("cf-connecting-ip") || request.socket.remoteAddress || "unknown";
@@ -117,7 +126,10 @@ router.post("/support-chat/session", async (request, response): Promise<void> =>
 async function findExistingConversation(request: Request) {
   const token = request.cookies?.[CUSTOMER_COOKIE];
   if (!token) return undefined;
-  const [conversation] = await db.select({ id: supportConversationsTable.id })
+  const [conversation] = await db.select({
+    id: supportConversationsTable.id,
+    status: supportConversationsTable.status,
+  })
     .from(supportConversationsTable)
     .where(eq(supportConversationsTable.customerTokenHash, hashSessionToken(token)))
     .limit(1);

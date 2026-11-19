@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import {
   Activity,
   BookOpen,
+  CalendarDays,
   Cloud,
   Code2,
   Database,
@@ -738,6 +739,7 @@ export default function SlackWorkspace() {
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           <div className="mb-1 px-2 pt-2 text-[11px] font-bold uppercase tracking-wider text-white/55">Workspace tools</div>
           <a href="/support-chat" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><Headset size={15} className="shrink-0 text-white/45" />Customer Support</a>
+          <a href="/calendar" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><CalendarDays size={15} className="shrink-0 text-white/45" />Calendar</a>
           <a href="/main-admin#orders" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><LayoutDashboard size={15} className="shrink-0 text-white/45" />Main Admin</a>
           <a href="/site-editor#site-editor" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><PenTool size={15} className="shrink-0 text-white/45" />Site Editor</a>
           <a href="/pos" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/75 hover:bg-white/10"><ShoppingCart size={15} className="shrink-0 text-white/45" />POS Checkout</a>

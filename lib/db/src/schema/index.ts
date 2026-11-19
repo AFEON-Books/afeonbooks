@@ -5,3 +5,4 @@ export * from "./auth";
 export * from "./mail";
 export * from "./marketing";
 export * from "./chat";
+export * from "./calendar";

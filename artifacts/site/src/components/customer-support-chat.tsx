@@ -128,6 +128,14 @@ export function CustomerSupportChat() {
     }
   };
 
+  const startNewChat = () => {
+    setConversationId(null);
+    setMessages([]);
+    setDraft("");
+    setStatus("open");
+    setError("");
+  };
+
   return (
     <div className="fixed bottom-5 right-5 z-[110] font-sans">
       {open && (
@@ -166,8 +174,15 @@ export function CustomerSupportChat() {
             <div ref={messagesEndRef} />
           </div>
           {status === "closed" ? (
-            <div className="border-t border-stone-100 bg-stone-50 px-3 py-3 text-center text-xs font-medium text-stone-600">
-              This support session has ended.
+            <div className="border-t border-stone-100 bg-stone-50 px-3 py-3 text-center">
+              <p className="text-xs font-medium text-stone-600">This support session has ended.</p>
+              <button
+                type="button"
+                onClick={startNewChat}
+                className="mt-2 rounded-full bg-[#80d7f6] px-4 py-2 text-sm font-semibold text-[#111111] hover:bg-[#6ac9eb]"
+              >
+                Start a new support chat
+              </button>
             </div>
           ) : (
           <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-stone-100 p-3">
