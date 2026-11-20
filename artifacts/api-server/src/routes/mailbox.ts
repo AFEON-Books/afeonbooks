@@ -119,11 +119,11 @@ function requireMailboxOrigin(request: Request, response: Response, next: NextFu
   if (!requestOrigin && referer) {
     try { requestOrigin = new URL(referer).origin; } catch {}
   }
-  const allowed = requestOrigin === "https://mailsystem.afeonbooks.com" || (
+  const allowed = requestOrigin === "https://usw-2.afeonbooks.com" || (
     process.env.NODE_ENV !== "production" && requestOrigin !== undefined && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)
   );
   if (!allowed) {
-    response.status(403).json({ error: "Mailbox requests must come from the mailsystem application." });
+    response.status(403).json({ error: "Mailbox requests must come from the staff admin app." });
     return;
   }
   next();
@@ -254,7 +254,7 @@ router.get("/mail/auth/start", requireUser, requireRole("staff", "admin"), async
 });
 
 router.get("/mail/auth/callback", requireUser, requireRole("staff", "admin"), async (request, response): Promise<void> => {
-  const appUrl = new URL("https://mailsystem.afeonbooks.com/");
+  const appUrl = new URL("https://usw-2.afeonbooks.com/zoho-mail");
   const code = typeof request.query.code === "string" ? request.query.code : "";
   const state = typeof request.query.state === "string" ? request.query.state : "";
   const sessionTokenHash = getCurrentSessionHash(request);

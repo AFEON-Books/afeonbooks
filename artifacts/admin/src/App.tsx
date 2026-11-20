@@ -25,7 +25,9 @@ import SiteEditor from "@/pages/site-editor";
 import { MaintenancePage } from "@/pages/maintenance";
 import CustomerSupportPage from "@/pages/customer-support";
 import CalendarPage from "@/pages/calendar";
+import Mailbox from "@/pages/mailbox";
 import SlackWorkspace from "@/components/SlackWorkspace";
+import { AuthProvider } from "../../site/src/lib/auth";
 
 const queryClient = new QueryClient();
 
@@ -714,6 +716,14 @@ function ChatPage() {
   return <SlackWorkspace />;
 }
 
+function AdminMailbox() {
+  return (
+    <AuthProvider>
+      <Mailbox />
+    </AuthProvider>
+  );
+}
+
 function Router() {
   const MaintenanceRoute = () => {
     const fromAdminButton =
@@ -741,8 +751,8 @@ function Router() {
       <Route path="/calendar/" component={CalendarPage} />
       <Route path="/pos" component={Pos} />
       <Route path="/pos/" component={Pos} />
-      <Route path="/zoho-mail" component={ZohoMail} />
-      <Route path="/zoho-mail/" component={ZohoMail} />
+      <Route path="/zoho-mail" component={AdminMailbox} />
+      <Route path="/zoho-mail/" component={AdminMailbox} />
       <Route path="/site-editor" component={SiteEditor} />
       <Route path="/site-editor/" component={SiteEditor} />
       <Route path="/main-admin" component={AdminHome} />
@@ -956,7 +966,9 @@ function App() {
             <AdminAccessGate>
               {isPosPath ? (
                 <Pos />
-              ) : isZohoMailPath || adminView === "#zoho-mail" ? (
+              ) : isZohoMailPath ? (
+                <AdminMailbox />
+              ) : adminView === "#zoho-mail" ? (
                 <ZohoMail />
               ) : (
                 <Router />

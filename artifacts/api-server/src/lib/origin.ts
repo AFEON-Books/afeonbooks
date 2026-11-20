@@ -3,7 +3,6 @@ const productionOrigins = new Set([
   "https://www.afeonbooks.com",
   "https://api-usw-2.afeonbooks.com",
   "https://authn.afeonbooks.com",
-  "https://mailsystem.afeonbooks.com",
   "https://source.afeonbooks.com",
   "https://usw-2.afeonbooks.com",
 ]);

@@ -22,10 +22,6 @@
       "custom_domain": true
     },
     {
-      "pattern": "mailsystem.afeonbooks.com",
-      "custom_domain": true
-    },
-    {
       "pattern": "source.afeonbooks.com",
       "custom_domain": true
     },

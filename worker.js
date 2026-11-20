@@ -550,10 +550,7 @@ if (url.hostname === "usw-2.afeonbooks.com") {
       return Response.redirect(new URL("https://usw-2.afeonbooks.com/main-admin"), 301);
     }
 
-    const isMailSystem = url.hostname === "mailsystem.afeonbooks.com";
-
     if (
-      !isMailSystem &&
       request.method === "GET" &&
       request.headers.get("Accept")?.includes("text/html") &&
       await isMaintenanceMode()

@@ -123,7 +123,7 @@ router.get("/email/zoho-callback", requireUser, requireRole("admin"), async (req
       nextSteps: [
         "Copy refreshToken into Render as ZOHO_MAIL_REFRESH_TOKEN.",
         "Copy the matching accountId for aiden.chen@afeonbooks.com into Render as ZOHO_MAIL_ACCOUNT_ID.",
-        "Redeploy the API service, then use https://usw-2.afeonbooks.com/zoho-mail to run the connection check.",
+        "Redeploy the API service, then use https://usw-2.afeonbooks.com/main-admin to run the connection check.",
       ],
     });
   } catch (err) {

@@ -24,8 +24,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { authApiRequest, createAuthEntryUrl, useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
+import { authApiRequest, useAuth } from "../../../site/src/lib/auth";
+import { Button } from "../components/ui/button";
+import "./mailbox.css";
 
 type ZohoFolder = { id: string; name: string; total?: number; unread?: number };
 type MailView = "all" | "unread" | "flagged";
