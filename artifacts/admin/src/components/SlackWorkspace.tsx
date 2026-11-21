@@ -207,8 +207,8 @@ export default function SlackWorkspace() {
   const pendingCandidatesRef = useRef(new Map<number, RTCIceCandidateInit[]>());
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
-  const ringtoneContextRef = useRef<AudioContext | null>(null);
-  const ringtoneIntervalRef = useRef<number | null>(null);
+  const outgoingRingtoneRef = useRef<HTMLAudioElement | null>(null);
+  const incomingRingtoneRef = useRef<HTMLAudioElement | null>(null);
   const roomPollRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -222,67 +222,29 @@ export default function SlackWorkspace() {
   const send = useCallback((event: object) => sendEvent(socketRef.current, event), []);
 
   const stopRingtone = useCallback(() => {
-    if (ringtoneIntervalRef.current !== null) {
-      window.clearInterval(ringtoneIntervalRef.current);
-      ringtoneIntervalRef.current = null;
+    for (const audio of [outgoingRingtoneRef.current, incomingRingtoneRef.current]) {
+      if (!audio) continue;
+      audio.pause();
+      audio.currentTime = 0;
     }
-    const context = ringtoneContextRef.current;
-    ringtoneContextRef.current = null;
-    if (context) void context.close();
   }, []);
 
   const startRingtone = useCallback(() => {
     stopRingtone();
-    const context = new AudioContext();
-    ringtoneContextRef.current = context;
-
-    const ring = () => {
-      const start = context.currentTime;
-      [880, 660].forEach((frequency, index) => {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.frequency.value = frequency;
-        gain.gain.setValueAtTime(0.0001, start + index * 0.18);
-        gain.gain.exponentialRampToValueAtTime(0.12, start + index * 0.18 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + index * 0.18 + 0.14);
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(start + index * 0.18);
-        oscillator.stop(start + index * 0.18 + 0.15);
-      });
-    };
-
-    void context.resume().then(() => {
-      ring();
-      ringtoneIntervalRef.current = window.setInterval(ring, 1500);
-    }).catch(() => stopRingtone());
+    const audio = incomingRingtoneRef.current ?? new Audio(`${import.meta.env.BASE_URL}afeon-recieve-ringtone.mp3`);
+    incomingRingtoneRef.current = audio;
+    audio.loop = true;
+    audio.volume = 0.8;
+    void audio.play().catch(() => undefined);
   }, [stopRingtone]);
 
   const startDialTone = useCallback(() => {
     stopRingtone();
-    const context = new AudioContext();
-    ringtoneContextRef.current = context;
-
-    const ring = () => {
-      const start = context.currentTime;
-      [440, 480].forEach((frequency) => {
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.frequency.value = frequency;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.08, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 1);
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(start);
-        oscillator.stop(start + 1.05);
-      });
-    };
-
-    void context.resume().then(() => {
-      ring();
-      ringtoneIntervalRef.current = window.setInterval(ring, 2500);
-    }).catch(() => stopRingtone());
+    const audio = outgoingRingtoneRef.current ?? new Audio(`${import.meta.env.BASE_URL}afeon-out-ringtone.mp3`);
+    outgoingRingtoneRef.current = audio;
+    audio.loop = true;
+    audio.volume = 0.8;
+    void audio.play().catch(() => undefined);
   }, [stopRingtone]);
 
   const playCloseSound = useCallback(() => {
