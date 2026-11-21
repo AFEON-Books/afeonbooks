@@ -196,6 +196,7 @@ export default function SlackWorkspace() {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [callError, setCallError] = useState("");
+  const [callSoundBlocked, setCallSoundBlocked] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const currentUserIdRef = useRef<number | null>(null);
@@ -227,24 +228,37 @@ export default function SlackWorkspace() {
       audio.pause();
       audio.currentTime = 0;
     }
+    setCallSoundBlocked(false);
   }, []);
 
   const startRingtone = useCallback(() => {
     stopRingtone();
-    const audio = incomingRingtoneRef.current ?? new Audio(`${import.meta.env.BASE_URL}afeon-recieve-ringtone.mp3`);
+    const audio = incomingRingtoneRef.current ?? new Audio("/assets/afeon-recieve-ringtone.mp3");
     incomingRingtoneRef.current = audio;
     audio.loop = true;
     audio.volume = 0.8;
-    void audio.play().catch(() => undefined);
+    void audio.play().then(() => {
+      setCallSoundBlocked(false);
+      setCallError("");
+    }).catch(() => {
+      setCallSoundBlocked(true);
+      setCallError("Your browser blocked the ringtone. Enable sound to hear incoming calls.");
+    });
   }, [stopRingtone]);
 
   const startDialTone = useCallback(() => {
     stopRingtone();
-    const audio = outgoingRingtoneRef.current ?? new Audio(`${import.meta.env.BASE_URL}afeon-out-ringtone.mp3`);
+    const audio = outgoingRingtoneRef.current ?? new Audio("/assets/afeon-out-ringtone.mp3");
     outgoingRingtoneRef.current = audio;
     audio.loop = true;
     audio.volume = 0.8;
-    void audio.play().catch(() => undefined);
+    void audio.play().then(() => {
+      setCallSoundBlocked(false);
+      setCallError("");
+    }).catch(() => {
+      setCallSoundBlocked(true);
+      setCallError("Your browser blocked the ringtone. Enable sound to hear the call ring.");
+    });
   }, [stopRingtone]);
 
   const playCloseSound = useCallback(() => {
@@ -1007,6 +1021,7 @@ export default function SlackWorkspace() {
               <h2 className="mt-4 text-lg font-bold">{incomingCall.callerName} is calling</h2>
               <p className="mt-1 text-sm text-white/60">{incomingCall.mediaType === "video" ? "Video call" : "Audio call"}</p>
               {callError && <p role="alert" className="mt-3 text-sm text-red-300">{callError}</p>}
+              {callSoundBlocked && <button type="button" onClick={startRingtone} className="mt-3 rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/20">Enable sound</button>}
               <div className="mt-6 flex justify-center gap-3">
                 <button type="button" onClick={rejectCall} className="rounded-full bg-red-600 px-5 py-3 text-sm font-bold hover:bg-red-500">Decline</button>
                 <button type="button" onClick={() => void acceptCall()} className="rounded-full bg-green-600 px-5 py-3 text-sm font-bold hover:bg-green-500">Answer</button>
@@ -1022,6 +1037,7 @@ export default function SlackWorkspace() {
                 <button type="button" onClick={endCall} disabled={!call.callId} aria-label="End call" className="rounded-full bg-red-600 p-3 hover:bg-red-500 disabled:opacity-40"><Phone size={20} className="rotate-[135deg]" /></button>
               </header>
               {callError && <p role="alert" className="mb-3 text-sm text-red-300">{callError}</p>}
+              {callSoundBlocked && <button type="button" onClick={startDialTone} className="mb-3 rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/20">Enable sound</button>}
               {call.mediaType === "video" ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {localStream && <VideoTile stream={localStream} label="You" muted />}
