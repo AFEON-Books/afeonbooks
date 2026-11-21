@@ -394,7 +394,43 @@ function sendToUser(userId: number, event: object): void {
   }
 }
 
-function removeFromCall(socket: WebSocket, connection: ChatConnection): void {
+async function recordCallEvent(call: ActiveCall, senderUserId: number, text: string): Promise<void> {
+  if (call.roomType === "dm") {
+    const peerUserId = call.roomId;
+    const [savedMessage] = await db.insert(chatMessagesTable)
+      .values({ senderUserId, recipientUserId: peerUserId, message: text })
+      .returning({
+        id: chatMessagesTable.id,
+        senderUserId: chatMessagesTable.senderUserId,
+        recipientUserId: chatMessagesTable.recipientUserId,
+        message: chatMessagesTable.message,
+        createdAt: chatMessagesTable.createdAt,
+      });
+    for (const [client, clientConnection] of connections) {
+      if (clientConnection.userId === senderUserId || clientConnection.userId === peerUserId) {
+        clientConnection.lastMessageId = Math.max(clientConnection.lastMessageId, savedMessage.id);
+        sendJson(client, { type: "message", message: savedMessage });
+      }
+    }
+    return;
+  }
+
+  const [sender] = await db.select({ name: usersTable.name })
+    .from(usersTable)
+    .where(eq(usersTable.id, senderUserId))
+    .limit(1);
+  const [savedMessage] = await db.insert(chatRoomMessagesTable)
+    .values({ roomId: call.roomId, senderUserId, message: text })
+    .returning({
+      id: chatRoomMessagesTable.id,
+      senderUserId: chatRoomMessagesTable.senderUserId,
+      message: chatRoomMessagesTable.message,
+      createdAt: chatRoomMessagesTable.createdAt,
+    });
+  await broadcastRoomMessage(call.roomId, { ...savedMessage, senderName: sender?.name ?? "Call" });
+}
+
+async function removeFromCall(socket: WebSocket, connection: ChatConnection): Promise<void> {
   const callKey = connection.callKey;
   if (!callKey) return;
   connection.callKey = undefined;
@@ -408,6 +444,7 @@ function removeFromCall(socket: WebSocket, connection: ChatConnection): void {
     }
   }
   if (call.participants.size === 0) {
+    await recordCallEvent(call, connection.userId, "Call Ended");
     for (const userId of call.invites) {
       sendToUser(userId, { type: "call_ended", callId: call.id });
     }
@@ -468,7 +505,49 @@ async function handleCallMessage(
     if (socket.readyState !== WebSocket.OPEN) return true;
     let call = activeCalls.get(callKey);
     if (call) {
-      sendCallError(socket, "A call is already active in this conversation.");
+      if (call.participants.has(connection.userId)) {
+        const participants = [...call.participants]
+          .filter((userId) => userId !== connection.userId);
+        const names = await db.select({ id: usersTable.id, name: usersTable.name })
+          .from(usersTable)
+          .where(inArray(usersTable.id, participants));
+        connection.callKey = callKey;
+        sendJson(socket, {
+          type: "call_joined",
+          callId: call.id,
+          mediaType: call.mediaType,
+          iceServers: call.iceServers,
+          participants: names,
+        });
+        return true;
+      }
+      if (call.participants.size >= MAX_CALL_PARTICIPANTS) {
+        sendCallError(socket, `Calls are limited to ${MAX_CALL_PARTICIPANTS} participants.`);
+        return true;
+      }
+      call.invites.delete(connection.userId);
+      call.participants.add(connection.userId);
+      connection.callKey = callKey;
+      const participants = [...call.participants]
+        .filter((userId) => userId !== connection.userId);
+      const names = await db.select({ id: usersTable.id, name: usersTable.name })
+        .from(usersTable)
+        .where(inArray(usersTable.id, participants));
+      sendJson(socket, {
+        type: "call_joined",
+        callId: call.id,
+        mediaType: call.mediaType,
+        iceServers: call.iceServers,
+        participants: names,
+      });
+      for (const userId of participants) {
+        sendToUser(userId, {
+          type: "call_user_joined",
+          callId: call.id,
+          userId: connection.userId,
+          userName,
+        });
+      }
       return true;
     }
     let iceServers: ChatIceServer[];
@@ -490,6 +569,7 @@ async function handleCallMessage(
     };
     activeCalls.set(callKey, call);
     connection.callKey = callKey;
+    await recordCallEvent(call, connection.userId, `${userName} started a call`);
     sendJson(socket, { type: "call_started", callId: call.id, roomType, roomId, mediaType, iceServers: call.iceServers });
     for (const userId of call.invites) {
       sendToUser(userId, {
@@ -581,7 +661,7 @@ async function handleCallMessage(
   }
 
   if (message.type === "call_leave") {
-    if (connection.callKey === callKey) removeFromCall(socket, connection);
+    if (connection.callKey === callKey) await removeFromCall(socket, connection);
     return true;
   }
 
@@ -776,7 +856,7 @@ export function attachChatWebSocket(server: Server): void {
           });
         });
         client.on("close", () => {
-          removeFromCall(client, connection);
+          void removeFromCall(client, connection);
           connections.delete(client);
         });
         client.on("error", (error) => {
