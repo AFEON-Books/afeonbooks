@@ -258,6 +258,54 @@ export default function SlackWorkspace() {
     }).catch(() => stopRingtone());
   }, [stopRingtone]);
 
+  const startDialTone = useCallback(() => {
+    stopRingtone();
+    const context = new AudioContext();
+    ringtoneContextRef.current = context;
+
+    const ring = () => {
+      const start = context.currentTime;
+      [440, 480].forEach((frequency) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.08, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 1);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 1.05);
+      });
+    };
+
+    void context.resume().then(() => {
+      ring();
+      ringtoneIntervalRef.current = window.setInterval(ring, 2500);
+    }).catch(() => stopRingtone());
+  }, [stopRingtone]);
+
+  const playCloseSound = useCallback(() => {
+    stopRingtone();
+    const context = new AudioContext();
+    void context.resume().then(() => {
+      [660, 440, 220].forEach((frequency, index) => {
+        const start = context.currentTime + index * 0.12;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.10, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.10);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.11);
+      });
+      window.setTimeout(() => { void context.close(); }, 500);
+    }).catch(() => { void context.close(); });
+  }, [stopRingtone]);
+
   const createPeerConnection = useCallback((userId: number, shouldOffer: boolean) => {
     const existing = peerConnectionsRef.current.get(userId);
     if (existing) return existing;
@@ -468,12 +516,16 @@ export default function SlackWorkspace() {
             peerConnectionsRef.current.delete(data.userId);
             setRemoteStreams((current) => current.filter((item) => item.userId !== data.userId));
           } else if (data.type === "call_invite_rejected") {
+            playCloseSound();
             setCallError("That person declined the call.");
+            cleanupCall();
           } else if (data.type === "call_ended" && data.callId) {
             stopRingtone();
+            playCloseSound();
             if (data.callId === callRef.current?.callId) cleanupCall();
             setIncomingCall((current) => current?.callId === data.callId ? null : current);
           } else if (data.type === "call_error" && data.error) {
+            playCloseSound();
             cleanupCall();
             setCallError(data.error);
           } else if (data.type === "error" && data.error) {
@@ -686,6 +738,7 @@ export default function SlackWorkspace() {
     const newCall: CallSession = { target, mediaType, phase: "requesting" };
     callRef.current = newCall;
     setCall(newCall);
+    startDialTone();
     try {
       const stream = await setupLocalMedia(mediaType);
       localStreamRef.current = stream;
@@ -741,6 +794,7 @@ export default function SlackWorkspace() {
   };
 
   const endCall = () => {
+    playCloseSound();
     if (call?.callId) send({ type: "call_leave", callId: call.callId });
     cleanupCall();
   };
