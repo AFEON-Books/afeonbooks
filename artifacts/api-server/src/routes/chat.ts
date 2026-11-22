@@ -232,6 +232,7 @@ interface ClientMessage {
   callId?: unknown;
   mediaType?: unknown;
   targetUserId?: unknown;
+  audio?: unknown;
   payload?: unknown;
 }
 
@@ -596,6 +597,50 @@ async function handleCallMessage(
     return true;
   }
   const [callKey, call] = foundCall;
+
+  if (message.type === "call_unanswered") {
+    if (call.invites.delete(connection.userId)) {
+      for (const userId of call.participants) {
+        sendToUser(userId, { type: "call_voicemail_available", callId, userId: connection.userId });
+      }
+    }
+    return true;
+  }
+
+  if (message.type === "call_voicemail") {
+    if (
+      call.roomType !== "dm" ||
+      !call.participants.has(connection.userId) ||
+      parseId(message.targetUserId) !== call.roomId
+    ) {
+      sendCallError(socket, "A voice message can only be sent to the person who was called.");
+      return true;
+    }
+    if (typeof message.audio !== "string" || !/^data:audio\/[^;,]+;base64,/i.test(message.audio) || message.audio.length > 2_000_000) {
+      sendCallError(socket, "That voice message is invalid or too large.");
+      return true;
+    }
+    const [savedMessage] = await db.insert(chatMessagesTable)
+      .values({
+        senderUserId: connection.userId,
+        recipientUserId: call.roomId,
+        message: message.audio,
+      })
+      .returning({
+        id: chatMessagesTable.id,
+        senderUserId: chatMessagesTable.senderUserId,
+        recipientUserId: chatMessagesTable.recipientUserId,
+        message: chatMessagesTable.message,
+        createdAt: chatMessagesTable.createdAt,
+      });
+    for (const [client, clientConnection] of connections) {
+      if (clientConnection.userId === connection.userId || clientConnection.userId === call.roomId) {
+        clientConnection.lastMessageId = Math.max(clientConnection.lastMessageId, savedMessage.id);
+        sendJson(client, { type: "message", message: savedMessage });
+      }
+    }
+    return true;
+  }
 
   if (message.type === "call_accept") {
     if (!call.invites.has(connection.userId) || connection.callKey) {

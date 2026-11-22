@@ -215,6 +215,9 @@ export default function SlackWorkspace() {
   const [webhookNotice, setWebhookNotice] = useState("");
   const [call, setCall] = useState<CallSession | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [voicemail, setVoicemail] = useState<{ target: Target; callId?: string } | null>(null);
+  const [voicemailRecording, setVoicemailRecording] = useState(false);
+  const [voicemailSeconds, setVoicemailSeconds] = useState(0);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [callError, setCallError] = useState("");
   const [callSoundBlocked, setCallSoundBlocked] = useState(false);
@@ -223,6 +226,7 @@ export default function SlackWorkspace() {
   const currentUserIdRef = useRef<number | null>(null);
   const selectedRef = useRef<Target | null>(null);
   const callRef = useRef<CallSession | null>(null);
+  const incomingCallRef = useRef<IncomingCall | null>(null);
   const roomsRef = useRef<Room[]>([]);
   const usersRef = useRef<ChatUser[]>([]);
   const peerConnectionsRef = useRef(new Map<number, RTCPeerConnection>());
@@ -231,6 +235,12 @@ export default function SlackWorkspace() {
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
   const outgoingRingtoneRef = useRef<HTMLAudioElement | null>(null);
   const incomingRingtoneRef = useRef<HTMLAudioElement | null>(null);
+  const incomingRingtoneLoopsRef = useRef(0);
+  const outgoingRingtoneLoopsRef = useRef(0);
+  const voicemailRecorderRef = useRef<MediaRecorder | null>(null);
+  const voicemailChunksRef = useRef<Blob[]>([]);
+  const voicemailDiscardRef = useRef(false);
+  const voicemailTimerRef = useRef<number | null>(null);
   const roomPollRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -238,6 +248,7 @@ export default function SlackWorkspace() {
   currentUserIdRef.current = currentUserId;
   selectedRef.current = target;
   callRef.current = call;
+  incomingCallRef.current = incomingCall;
   roomsRef.current = rooms;
   usersRef.current = users;
 
@@ -246,9 +257,12 @@ export default function SlackWorkspace() {
   const stopRingtone = useCallback(() => {
     for (const audio of [outgoingRingtoneRef.current, incomingRingtoneRef.current]) {
       if (!audio) continue;
+      audio.onended = null;
       audio.pause();
       audio.currentTime = 0;
     }
+    incomingRingtoneLoopsRef.current = 0;
+    outgoingRingtoneLoopsRef.current = 0;
     setCallSoundBlocked(false);
   }, []);
 
@@ -256,8 +270,22 @@ export default function SlackWorkspace() {
     stopRingtone();
     const audio = incomingRingtoneRef.current ?? new Audio("/assets/afeon-recieve-ringtone.mp3");
     incomingRingtoneRef.current = audio;
-    audio.loop = true;
+    audio.loop = false;
     audio.volume = 0.8;
+    audio.onended = () => {
+      incomingRingtoneLoopsRef.current += 1;
+      if (incomingRingtoneLoopsRef.current >= 5) {
+        const invite = incomingCallRef.current;
+        stopRingtone();
+        setIncomingCall(null);
+        if (invite) send({ type: "call_unanswered", callId: invite.callId });
+        return;
+      }
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        setCallSoundBlocked(true);
+      });
+    };
     void audio.play().then(() => {
       setCallSoundBlocked(false);
       setCallError("");
@@ -271,8 +299,28 @@ export default function SlackWorkspace() {
     stopRingtone();
     const audio = outgoingRingtoneRef.current ?? new Audio("/assets/afeon-out-ringtone.mp3");
     outgoingRingtoneRef.current = audio;
-    audio.loop = true;
+    audio.loop = false;
     audio.volume = 0.8;
+    audio.onended = () => {
+      outgoingRingtoneLoopsRef.current += 1;
+      if (outgoingRingtoneLoopsRef.current >= 5) {
+        const currentCall = callRef.current;
+        stopRingtone();
+        if (currentCall) {
+          for (const track of localStreamRef.current?.getTracks() ?? []) track.stop();
+          localStreamRef.current = null;
+          setLocalStream(null);
+          callRef.current = null;
+          setCall(null);
+          setVoicemail({ target: currentCall.target, callId: currentCall.callId });
+        }
+        return;
+      }
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        setCallSoundBlocked(true);
+      });
+    };
     void audio.play().then(() => {
       setCallSoundBlocked(false);
       setCallError("");
@@ -512,6 +560,17 @@ export default function SlackWorkspace() {
             connection?.close();
             peerConnectionsRef.current.delete(data.userId);
             setRemoteStreams((current) => current.filter((item) => item.userId !== data.userId));
+          } else if (data.type === "call_voicemail_available" && data.callId) {
+            stopRingtone();
+            const currentCall = callRef.current;
+            if (currentCall) {
+              for (const track of localStreamRef.current?.getTracks() ?? []) track.stop();
+              localStreamRef.current = null;
+              setLocalStream(null);
+              callRef.current = null;
+              setCall(null);
+              setVoicemail({ target: currentCall.target, callId: data.callId });
+            }
           } else if (data.type === "call_invite_rejected") {
             playCloseSound();
             setCallError("That person declined the call.");
@@ -885,6 +944,91 @@ export default function SlackWorkspace() {
     cleanupCall();
   };
 
+  const startVoicemailRecording = async () => {
+    if (!voicemail || voicemailRecording) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setCallError("Voice recording is not available in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      voicemailRecorderRef.current = recorder;
+      voicemailChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voicemailChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        for (const track of stream.getTracks()) track.stop();
+        if (voicemailDiscardRef.current) {
+          voicemailDiscardRef.current = false;
+          voicemailChunksRef.current = [];
+          setVoicemailRecording(false);
+          return;
+        }
+        if (voicemailTimerRef.current !== null) window.clearInterval(voicemailTimerRef.current);
+        voicemailTimerRef.current = null;
+        const blob = new Blob(voicemailChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 1_500_000) {
+          setCallError("Voice messages must be under 1.5 MB.");
+          setVoicemailRecording(false);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = typeof reader.result === "string" ? reader.result : "";
+          if (!dataUrl) {
+            setCallError("Unable to prepare the voice message.");
+            setVoicemailRecording(false);
+            return;
+          }
+          if (voicemail.target.kind === "dm") {
+            send({
+              type: "call_voicemail",
+              callId: voicemail.callId,
+              targetUserId: voicemail.target.user.id,
+              audio: dataUrl,
+            });
+            if (voicemail.callId) send({ type: "call_leave", callId: voicemail.callId });
+          }
+          setVoicemail(null);
+          setVoicemailRecording(false);
+          setVoicemailSeconds(0);
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      setVoicemailRecording(true);
+      setVoicemailSeconds(0);
+      voicemailTimerRef.current = window.setInterval(() => {
+        setVoicemailSeconds((seconds) => {
+          if (seconds + 1 >= 60) {
+            voicemailRecorderRef.current?.stop();
+            return 60;
+          }
+          return seconds + 1;
+        });
+      }, 1_000);
+    } catch (cause) {
+      setCallError(cause instanceof Error ? cause.message : "Unable to access the microphone.");
+    }
+  };
+
+  const stopVoicemailRecording = () => {
+    if (voicemailRecorderRef.current?.state === "recording") voicemailRecorderRef.current.stop();
+  };
+
+  const cancelVoicemail = () => {
+    voicemailDiscardRef.current = true;
+    if (voicemailRecorderRef.current?.state === "recording") voicemailRecorderRef.current.stop();
+    if (voicemailTimerRef.current !== null) window.clearInterval(voicemailTimerRef.current);
+    voicemailTimerRef.current = null;
+    if (voicemail?.callId) send({ type: "call_leave", callId: voicemail.callId });
+    setVoicemail(null);
+    setVoicemailRecording(false);
+    setVoicemailSeconds(0);
+  };
+
   const toggleMember = (userId: number) => {
     setSelectedMemberIds((current) => current.includes(userId)
       ? current.filter((id) => id !== userId)
@@ -1016,7 +1160,11 @@ export default function SlackWorkspace() {
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[#80d7f6]/25 text-sm font-bold text-[#236078]">{(mine ? "You" : target.user.name).slice(0, 1).toUpperCase()}</span>
                       <div className="min-w-0">
                         <p className="text-sm font-bold">{mine ? "You" : target.user.name}<time className="ml-2 text-[10px] font-normal text-black/40">{new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time></p>
-                        <p className={`mt-1 inline-block max-w-full whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-left text-sm leading-6 ${mine ? "bg-[#80d7f6]/30" : "bg-[#f3f3f3]"}`}>{message.message}</p>
+                        {message.message.startsWith("data:audio/") ? (
+                  <audio className={`mt-2 block max-w-full ${mine ? "ml-auto" : ""}`} controls preload="metadata" src={message.message} />
+                ) : (
+                  <p className={`mt-1 inline-block max-w-full whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-left text-sm leading-6 ${mine ? "bg-[#80d7f6]/30" : "bg-[#f3f3f3]"}`}>{message.message}</p>
+                )}
                       </div>
                     </article>
                   );
@@ -1188,9 +1336,26 @@ export default function SlackWorkspace() {
         </div>
       )}
 
-      {(call || incomingCall) && (
+      {(call || incomingCall || voicemail) && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center bg-[#101214]/90 p-4 text-white">
-          {incomingCall && !call ? (
+          {voicemail ? (
+            <section className="w-full max-w-sm rounded-2xl bg-[#242629] p-6 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#80d7f6] text-[#111111]"><Phone /></div>
+              <h2 className="mt-4 text-lg font-bold">Leave a voice message</h2>
+              <p className="mt-1 text-sm text-white/60">Send a recording to {voicemail.target.kind === "dm" ? voicemail.target.user.name : voicemail.target.room.name}</p>
+              {callError && <p role="alert" className="mt-3 text-sm text-red-300">{callError}</p>}
+              {voicemailRecording ? (
+                <>
+                  <p className="mt-5 text-2xl font-bold tabular-nums">0:{String(voicemailSeconds).padStart(2, "0")}</p>
+                  <p className="mt-1 text-xs text-white/50">Recording</p>
+                  <button type="button" onClick={stopVoicemailRecording} className="mt-5 rounded-md bg-green-600 px-5 py-3 text-sm font-bold hover:bg-green-500">Send voice message</button>
+                </>
+              ) : (
+                <button type="button" onClick={() => void startVoicemailRecording()} className="mt-5 rounded-md bg-[#80d7f6] px-5 py-3 text-sm font-bold text-[#111111] hover:bg-[#6ac9eb]">Start recording</button>
+              )}
+              <button type="button" onClick={cancelVoicemail} className="mt-3 block w-full rounded-md px-3 py-2 text-sm text-white/70 hover:bg-white/10">Cancel</button>
+            </section>
+          ) : incomingCall && !call ? (
             <section className="w-full max-w-sm rounded-2xl bg-[#242629] p-6 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#80d7f6] text-[#111111]">{incomingCall.mediaType === "video" ? <Video /> : <Phone />}</div>
               <h2 className="mt-4 text-lg font-bold">{incomingCall.callerName} is calling</h2>
