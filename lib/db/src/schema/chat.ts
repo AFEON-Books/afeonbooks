@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, serial, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { usersTable } from "./auth";
 
@@ -48,6 +48,18 @@ export const chatRoomMessagesTable = pgTable("chat_room_messages", {
 }, (table) => [
   index("chat_room_messages_room_created_idx").on(table.roomId, table.createdAt, table.id),
 ]);
+
+export const chatRoomWebhooksTable = pgTable("chat_room_webhooks", {
+  roomId: integer("room_id").primaryKey().references(() => chatRoomsTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  encryptedSecret: text("encrypted_secret"),
+  mtlsEnabled: boolean("mtls_enabled").notNull().default(false),
+  encryptedClientCertificate: text("encrypted_client_certificate"),
+  encryptedClientKey: text("encrypted_client_key"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const supportConversationsTable = pgTable("support_conversations", {
   id: serial("id").primaryKey(),

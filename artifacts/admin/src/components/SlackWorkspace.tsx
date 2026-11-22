@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Users,
   Video,
+  Webhook,
   X,
 } from "lucide-react";
 
@@ -40,6 +41,13 @@ interface Room {
   type: "channel" | "group";
   createdBy: number | null;
   createdAt: string;
+}
+
+interface ChatWebhookSettings {
+  name: string;
+  url: string;
+  secretConfigured: boolean;
+  mtlsEnabled: boolean;
 }
 
 interface DirectMessage {
@@ -192,6 +200,19 @@ export default function SlackWorkspace() {
   const [roomName, setRoomName] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   const [creatingRoom, setCreatingRoom] = useState(false);
+  const [webhookRoom, setWebhookRoom] = useState<Room | null>(null);
+  const [webhookLoading, setWebhookLoading] = useState(false);
+  const [webhookSaving, setWebhookSaving] = useState(false);
+  const [webhookSettings, setWebhookSettings] = useState<ChatWebhookSettings | null>(null);
+  const [webhookName, setWebhookName] = useState("#alerts");
+  const [webhookUrl, setWebhookUrl] = useState("https://webhook.afeonbooks.com/usw-2");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
+  const [webhookMtls, setWebhookMtls] = useState(true);
+  const [webhookCertificate, setWebhookCertificate] = useState("");
+  const [webhookPrivateKey, setWebhookPrivateKey] = useState("");
+  const [webhookError, setWebhookError] = useState("");
+  const [webhookNotice, setWebhookNotice] = useState("");
   const [call, setCall] = useState<CallSession | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
@@ -640,6 +661,95 @@ export default function SlackWorkspace() {
     }
   };
 
+  const openWebhookSettings = async (room: Room) => {
+    setWebhookRoom(room);
+    setWebhookLoading(true);
+    setWebhookError("");
+    setWebhookNotice("");
+    setWebhookSettings(null);
+    setWebhookName("#alerts");
+    setWebhookUrl("https://webhook.afeonbooks.com/usw-2");
+    setWebhookSecret("");
+    setClearWebhookSecret(false);
+    setWebhookMtls(true);
+    setWebhookCertificate("");
+    setWebhookPrivateKey("");
+    try {
+      const response = await fetch(`${API_BASE}/chat/rooms/${room.id}/webhook`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(await readError(response, "Unable to load webhook settings."));
+      const result = await response.json() as { webhook: ChatWebhookSettings | null };
+      if (result.webhook) {
+        setWebhookSettings(result.webhook);
+        setWebhookName(result.webhook.name);
+        setWebhookUrl(result.webhook.url);
+        setWebhookMtls(result.webhook.mtlsEnabled);
+      }
+    } catch (cause) {
+      setWebhookError(cause instanceof Error ? cause.message : "Unable to load webhook settings.");
+    } finally {
+      setWebhookLoading(false);
+    }
+  };
+
+  const saveWebhookSettings = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!webhookRoom || webhookSaving) return;
+    setWebhookSaving(true);
+    setWebhookError("");
+    setWebhookNotice("");
+    try {
+      const response = await fetch(`${API_BASE}/chat/rooms/${webhookRoom.id}/webhook`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: webhookName,
+          url: webhookUrl,
+          webhookSecret,
+          clearSecret: clearWebhookSecret,
+          enableMtls: webhookMtls,
+          clientCertificate: webhookCertificate,
+          clientKey: webhookPrivateKey,
+        }),
+      });
+      if (!response.ok) throw new Error(await readError(response, "Unable to save webhook settings."));
+      const result = await response.json() as { webhook: ChatWebhookSettings };
+      setWebhookSettings(result.webhook);
+      setWebhookSecret("");
+      setClearWebhookSecret(false);
+      setWebhookCertificate("");
+      setWebhookPrivateKey("");
+      setWebhookNotice("Webhook saved. New messages in #alerts will be sent to this destination.");
+    } catch (cause) {
+      setWebhookError(cause instanceof Error ? cause.message : "Unable to save webhook settings.");
+    } finally {
+      setWebhookSaving(false);
+    }
+  };
+
+  const deleteWebhookSettings = async () => {
+    if (!webhookRoom || webhookSaving) return;
+    setWebhookSaving(true);
+    setWebhookError("");
+    setWebhookNotice("");
+    try {
+      const response = await fetch(`${API_BASE}/chat/rooms/${webhookRoom.id}/webhook`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(await readError(response, "Unable to remove the webhook."));
+      setWebhookRoom(null);
+      setWebhookSettings(null);
+    } catch (cause) {
+      setWebhookError(cause instanceof Error ? cause.message : "Unable to remove the webhook.");
+    } finally {
+      setWebhookSaving(false);
+    }
+  };
+
   const mentionSuggestions: MentionSuggestion[] = target?.kind === "room" && mentionRange
     ? [
       { kind: "role" as const, id: "staff", label: "staff", detail: "Staff role" },
@@ -880,6 +990,9 @@ export default function SlackWorkspace() {
               <div className="flex items-center gap-1">
                 <button type="button" title="Start audio call" onClick={() => void startCall("audio")} disabled={!connected || Boolean(call) || Boolean(incomingCall)} className="rounded-md p-2 hover:bg-black/5 disabled:opacity-40"><Phone size={18} /></button>
                 <button type="button" title="Start video call" onClick={() => void startCall("video")} disabled={!connected || Boolean(call) || Boolean(incomingCall)} className="rounded-md p-2 hover:bg-black/5 disabled:opacity-40"><Video size={18} /></button>
+                {target.kind === "room" && target.room.type === "channel" && target.room.name.toLowerCase() === "alerts" && (
+                  <button type="button" title="Configure #alerts webhook" onClick={() => void openWebhookSettings(target.room)} className="rounded-md p-2 hover:bg-black/5"><Webhook size={18} /></button>
+                )}
                 <a href="/" title="Workspace" className="ml-1 rounded-md px-2 py-1.5 text-xs text-black/55 hover:bg-black/5">Workspace</a>
               </div>
             </header>
@@ -1009,6 +1122,68 @@ export default function SlackWorkspace() {
             )}
             {showCreateRoom === "group" && selectedMemberIds.length === 0 && <p className="mt-2 text-xs text-amber-700">Select at least one coworker.</p>}
             <button type="submit" disabled={creatingRoom || !roomName.trim() || (showCreateRoom === "group" && selectedMemberIds.length === 0)} className="mt-5 w-full rounded-md bg-[#80d7f6] px-4 py-2.5 text-sm font-bold text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40">{creatingRoom ? "Creating…" : showCreateRoom === "channel" ? "Create channel" : "Create group"}</button>
+          </form>
+        </div>
+      )}
+
+      {webhookRoom && (
+        <div className="fixed inset-0 z-[125] flex items-center justify-center overflow-y-auto bg-black/50 p-4" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !webhookSaving) setWebhookRoom(null);
+        }}>
+          <form onSubmit={saveWebhookSettings} className="my-auto w-full max-w-xl rounded-xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold">#alerts Generic Webhook</h2>
+                <p className="mt-1 text-xs text-black/50">Send new channel messages to an HTTPS destination.</p>
+              </div>
+              <button type="button" onClick={() => setWebhookRoom(null)} aria-label="Close dialog" className="rounded p-1 hover:bg-black/5"><X size={18} /></button>
+            </div>
+            {webhookLoading ? <p className="py-8 text-center text-sm text-black/50">Loading webhook settings…</p> : (
+              <>
+                <label className="mt-5 block text-sm font-semibold">Name
+                  <input value={webhookName} onChange={(event) => setWebhookName(event.target.value)} maxLength={80} required className="mt-2 w-full rounded-md border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#80d7f6]" />
+                </label>
+                <label className="mt-4 block text-sm font-semibold">URL
+                  <select value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} className="mt-2 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-[#80d7f6]">
+                    <option value="https://webhook.afeonbooks.com/usw-2">https://webhook.afeonbooks.com/usw-2 (main)</option>
+                    <option value="https://webhook.afeonbooks.com/use-2">https://webhook.afeonbooks.com/use-2 (failover)</option>
+                  </select>
+                </label>
+                <label className="mt-4 block text-sm font-semibold">Webhook secret (optional)
+                  <input type="password" autoComplete="new-password" value={webhookSecret} onChange={(event) => setWebhookSecret(event.target.value)} maxLength={2048} placeholder={webhookSettings?.secretConfigured ? "Saved; leave blank to keep current secret" : "Enter a shared secret"} className="mt-2 w-full rounded-md border border-black/15 px-3 py-2 text-sm outline-none focus:border-[#80d7f6]" />
+                </label>
+                {webhookSettings?.secretConfigured && (
+                  <label className="mt-2 flex items-center gap-2 text-xs text-black/65">
+                    <input type="checkbox" checked={clearWebhookSecret} onChange={(event) => setClearWebhookSecret(event.target.checked)} />
+                    Remove the saved webhook secret
+                  </label>
+                )}
+                <label className="mt-4 flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" checked={webhookMtls} onChange={(event) => setWebhookMtls(event.target.checked)} />
+                  Enable mTLS
+                </label>
+                {webhookMtls && (
+                  <div className="mt-3 space-y-3">
+                    <label className="block text-sm font-semibold">Client certificate (PEM)
+                      <textarea value={webhookCertificate} onChange={(event) => setWebhookCertificate(event.target.value)} rows={4} autoComplete="off" placeholder={webhookSettings?.mtlsEnabled ? "Saved; leave blank to keep current certificate" : "-----BEGIN CERTIFICATE-----"} className="mt-2 w-full rounded-md border border-black/15 px-3 py-2 font-mono text-xs outline-none focus:border-[#80d7f6]" />
+                    </label>
+                    <label className="block text-sm font-semibold">Client private key (PEM)
+                      <textarea value={webhookPrivateKey} onChange={(event) => setWebhookPrivateKey(event.target.value)} rows={4} autoComplete="off" placeholder={webhookSettings?.mtlsEnabled ? "Saved; leave blank to keep current key" : "-----BEGIN PRIVATE KEY-----"} className="mt-2 w-full rounded-md border border-black/15 px-3 py-2 font-mono text-xs outline-none focus:border-[#80d7f6]" />
+                    </label>
+                    <p className="text-xs text-black/50">Credentials are encrypted in the API database and never returned to the browser after saving.</p>
+                  </div>
+                )}
+                {webhookError && <p role="alert" className="mt-3 text-sm text-red-700">{webhookError}</p>}
+                {webhookNotice && <p role="status" className="mt-3 text-sm text-green-700">{webhookNotice}</p>}
+                <div className="mt-5 flex flex-wrap justify-between gap-2">
+                  {webhookSettings && <button type="button" onClick={() => void deleteWebhookSettings()} disabled={webhookSaving} className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40">Remove webhook</button>}
+                  <div className="ml-auto flex gap-2">
+                    <button type="button" onClick={() => setWebhookRoom(null)} className="rounded-md px-3 py-2 text-sm hover:bg-black/5">Cancel</button>
+                    <button type="submit" disabled={webhookSaving} className="rounded-md bg-[#80d7f6] px-4 py-2 text-sm font-bold text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40">{webhookSaving ? "Saving…" : "Save destination"}</button>
+                  </div>
+                </div>
+              </>
+            )}
           </form>
         </div>
       )}

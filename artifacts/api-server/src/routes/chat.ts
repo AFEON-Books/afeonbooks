@@ -7,6 +7,7 @@ import { chatMessagesTable, chatPresenceTable, chatRoomMembersTable, chatRoomMes
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { loadStaffUserFromSessionToken, requireStaffAccess, requireUser } from "../lib/auth";
 import { isAllowedOrigin } from "../lib/origin";
+import { dispatchAlertsWebhook } from "../lib/chat-webhook";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -202,6 +203,7 @@ router.post("/chat/rooms/:id/messages", requireUser, requireStaffAccess("staff",
     });
   const responseMessage = { ...savedMessage, senderName: request.user!.name };
   await broadcastRoomMessage(roomId, responseMessage);
+  void dispatchAlertsWebhook(responseMessage);
   response.status(201).json(responseMessage);
 });
 
@@ -428,6 +430,7 @@ async function recordCallEvent(call: ActiveCall, senderUserId: number, text: str
       createdAt: chatRoomMessagesTable.createdAt,
     });
   await broadcastRoomMessage(call.roomId, { ...savedMessage, senderName: sender?.name ?? "Call" });
+    void dispatchAlertsWebhook({ ...savedMessage, senderName: sender?.name ?? "Call" });
 }
 
 async function removeFromCall(socket: WebSocket, connection: ChatConnection): Promise<void> {

@@ -254,6 +254,17 @@ async function ensureCustomerAndRoomChatTables() {
     );
     CREATE INDEX IF NOT EXISTS chat_room_messages_room_created_idx
       ON chat_room_messages (room_id, created_at, id);
+    CREATE TABLE IF NOT EXISTS chat_room_webhooks (
+      room_id integer PRIMARY KEY REFERENCES chat_rooms(id) ON DELETE CASCADE,
+      name text NOT NULL,
+      url text NOT NULL,
+      encrypted_secret text,
+      mtls_enabled boolean NOT NULL DEFAULT false,
+      encrypted_client_certificate text,
+      encrypted_client_key text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS support_conversations (
       id serial PRIMARY KEY,
       customer_token_hash text NOT NULL UNIQUE,

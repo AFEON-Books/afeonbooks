@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizzle-orm";
-import { authRateLimitsTable, authTokensTable, db, loyaltyTransactionsTable, usersTable } from "@workspace/db";
+import { authRateLimitsTable, authTokensTable, db, githubAccountLinksTable, loyaltyTransactionsTable, usersTable } from "@workspace/db";
 import {
   consumeAuthToken,
   createAuthToken,
@@ -356,32 +356,85 @@ router.get("/auth/github/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  if (verifiedGithubEmails.length === 0) {
-    githubFailure(res, 403, "Your GitHub account needs a verified email that matches an existing AFEON Books staff or admin account.");
-    return;
+  const githubUserId = String(githubUser.id);
+  let userId: number | undefined;
+
+  const [linkedByGithubId] = await db.select({
+    userId: githubAccountLinksTable.userId,
+    role: usersTable.role,
+  }).from(githubAccountLinksTable)
+    .innerJoin(usersTable, eq(usersTable.id, githubAccountLinksTable.userId))
+    .where(eq(githubAccountLinksTable.githubUserId, githubUserId))
+    .limit(1);
+  if (linkedByGithubId && (linkedByGithubId.role === "staff" || linkedByGithubId.role === "admin")) {
+    userId = linkedByGithubId.userId;
   }
 
-  const matchingUsers = await db.select().from(usersTable)
-    .where(and(
-      inArray(usersTable.email, verifiedGithubEmails),
-      or(eq(usersTable.role, "staff"), eq(usersTable.role, "admin")),
-    ))
-    .limit(2);
-  if (matchingUsers.length !== 1) {
-    githubFailure(
-      res,
-      403,
-      matchingUsers.length > 1
-        ? "Your GitHub account matches multiple AFEON Books accounts. Ask an administrator to review the account emails."
-        : "No existing AFEON Books account matches a verified email on your GitHub account. Sign in with the GitHub account associated with your admin email.",
-    );
-    return;
-  }
-  const [user] = matchingUsers;
+  if (!userId) {
+    const [linkedByUsername] = await db.select({
+      id: githubAccountLinksTable.id,
+      githubUserId: githubAccountLinksTable.githubUserId,
+      userId: githubAccountLinksTable.userId,
+      role: usersTable.role,
+    }).from(githubAccountLinksTable)
+      .innerJoin(usersTable, eq(usersTable.id, githubAccountLinksTable.userId))
+      .where(ilike(githubAccountLinksTable.githubUsername, githubUser.login))
+      .limit(1);
 
-  if (!await markSessionGithubOrganizationVerified(req, user.id, String(githubUser.id))) {
+    if (linkedByUsername?.githubUserId && linkedByUsername.githubUserId !== githubUserId) {
+      githubFailure(res, 403, "This GitHub username is linked to a different account. Ask an administrator to review the link.");
+      return;
+    }
+
+    if (linkedByUsername && (linkedByUsername.role === "staff" || linkedByUsername.role === "admin")) {
+      if (!linkedByUsername.githubUserId) {
+        const [claimedLink] = await db.update(githubAccountLinksTable)
+          .set({ githubUserId })
+          .where(and(eq(githubAccountLinksTable.id, linkedByUsername.id), isNull(githubAccountLinksTable.githubUserId)))
+          .returning({ id: githubAccountLinksTable.id });
+        if (!claimedLink) {
+          const [currentLink] = await db.select({ githubUserId: githubAccountLinksTable.githubUserId })
+            .from(githubAccountLinksTable)
+            .where(eq(githubAccountLinksTable.id, linkedByUsername.id))
+            .limit(1);
+          if (currentLink?.githubUserId !== githubUserId) {
+            githubFailure(res, 403, "This GitHub username is linked to a different account. Ask an administrator to review the link.");
+            return;
+          }
+        }
+      }
+      userId = linkedByUsername.userId;
+    }
+  }
+
+  if (!userId) {
+    if (verifiedGithubEmails.length === 0) {
+      githubFailure(res, 403, "Your GitHub account needs a verified email matching a staff or admin account, or an administrator must link your GitHub account.");
+      return;
+    }
+
+    const matchingUsers = await db.select().from(usersTable)
+      .where(and(
+        inArray(usersTable.email, verifiedGithubEmails),
+        or(eq(usersTable.role, "staff"), eq(usersTable.role, "admin")),
+      ))
+      .limit(2);
+    if (matchingUsers.length !== 1) {
+      githubFailure(
+        res,
+        403,
+        matchingUsers.length > 1
+          ? "Your GitHub account matches multiple AFEON Books accounts. Ask an administrator to review the account emails."
+          : "No existing AFEON Books account is linked to this GitHub account, and no verified GitHub email matches a staff or admin account.",
+      );
+      return;
+    }
+    userId = matchingUsers[0].id;
+  }
+
+  if (!await markSessionGithubOrganizationVerified(req, userId, githubUserId)) {
     await destroySession(req, res);
-    await createSession(user.id, req, res, String(githubUser.id), new Date());
+    await createSession(userId, req, res, githubUserId, new Date());
   }
   res.set("Cache-Control", "no-store").redirect(303, returnUrl);
 });

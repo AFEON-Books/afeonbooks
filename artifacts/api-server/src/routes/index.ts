@@ -13,6 +13,7 @@ import devEventsRouter from "./dev-events";
 import marketingRouter from "./marketing";
 import mailboxRouter from "./mailbox";
 import chatRouter from "./chat";
+import chatWebhooksRouter from "./chat-webhooks";
 import supportChatRouter from "./support-chat";
 import calendarRouter from "./calendar";
 
@@ -32,6 +33,7 @@ router.use(devEventsRouter);
 router.use(marketingRouter);
 router.use(mailboxRouter);
 router.use(chatRouter);
+router.use(chatWebhooksRouter);
 router.use(supportChatRouter);
 router.use(calendarRouter);
 
