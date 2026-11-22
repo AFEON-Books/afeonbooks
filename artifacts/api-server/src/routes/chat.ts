@@ -431,7 +431,7 @@ async function recordCallEvent(call: ActiveCall, senderUserId: number, text: str
       createdAt: chatRoomMessagesTable.createdAt,
     });
   await broadcastRoomMessage(call.roomId, { ...savedMessage, senderName: sender?.name ?? "Call" });
-    void dispatchAlertsWebhook({ ...savedMessage, senderName: sender?.name ?? "Call" });
+  void dispatchAlertsWebhook({ ...savedMessage, senderName: sender?.name ?? "Call" });
 }
 
 async function removeFromCall(socket: WebSocket, connection: ChatConnection): Promise<void> {

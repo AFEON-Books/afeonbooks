@@ -753,6 +753,17 @@ export default function SlackWorkspace() {
     }
   };
 
+  const closeWebhookSettings = () => {
+    setWebhookRoom(null);
+    setWebhookSettings(null);
+    setWebhookSecret("");
+    setClearWebhookSecret(false);
+    setWebhookCertificate("");
+    setWebhookPrivateKey("");
+    setWebhookError("");
+    setWebhookNotice("");
+  };
+
   const saveWebhookSettings = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!webhookRoom || webhookSaving) return;
@@ -800,8 +811,7 @@ export default function SlackWorkspace() {
         credentials: "include",
       });
       if (!response.ok) throw new Error(await readError(response, "Unable to remove the webhook."));
-      setWebhookRoom(null);
-      setWebhookSettings(null);
+      closeWebhookSettings();
     } catch (cause) {
       setWebhookError(cause instanceof Error ? cause.message : "Unable to remove the webhook.");
     } finally {
@@ -1276,7 +1286,7 @@ export default function SlackWorkspace() {
 
       {webhookRoom && (
         <div className="fixed inset-0 z-[125] flex items-center justify-center overflow-y-auto bg-black/50 p-4" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !webhookSaving) setWebhookRoom(null);
+          if (event.target === event.currentTarget && !webhookSaving) closeWebhookSettings();
         }}>
           <form onSubmit={saveWebhookSettings} className="my-auto w-full max-w-xl rounded-xl bg-white p-5 shadow-2xl">
             <div className="flex items-center justify-between gap-4">
@@ -1284,7 +1294,7 @@ export default function SlackWorkspace() {
                 <h2 className="text-lg font-bold">#alerts Generic Webhook</h2>
                 <p className="mt-1 text-xs text-black/50">Send new channel messages to an HTTPS destination.</p>
               </div>
-              <button type="button" onClick={() => setWebhookRoom(null)} aria-label="Close dialog" className="rounded p-1 hover:bg-black/5"><X size={18} /></button>
+              <button type="button" onClick={closeWebhookSettings} disabled={webhookSaving} aria-label="Close dialog" className="rounded p-1 hover:bg-black/5 disabled:opacity-40"><X size={18} /></button>
             </div>
             {webhookLoading ? <p className="py-8 text-center text-sm text-black/50">Loading webhook settings…</p> : (
               <>
@@ -1326,7 +1336,7 @@ export default function SlackWorkspace() {
                 <div className="mt-5 flex flex-wrap justify-between gap-2">
                   {webhookSettings && <button type="button" onClick={() => void deleteWebhookSettings()} disabled={webhookSaving} className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40">Remove webhook</button>}
                   <div className="ml-auto flex gap-2">
-                    <button type="button" onClick={() => setWebhookRoom(null)} className="rounded-md px-3 py-2 text-sm hover:bg-black/5">Cancel</button>
+                    <button type="button" onClick={closeWebhookSettings} disabled={webhookSaving} className="rounded-md px-3 py-2 text-sm hover:bg-black/5 disabled:opacity-40">Cancel</button>
                     <button type="submit" disabled={webhookSaving} className="rounded-md bg-[#80d7f6] px-4 py-2 text-sm font-bold text-[#111111] hover:bg-[#6ac9eb] disabled:opacity-40">{webhookSaving ? "Saving…" : "Save destination"}</button>
                   </div>
                 </div>
